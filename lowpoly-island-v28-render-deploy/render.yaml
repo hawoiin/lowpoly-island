@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: lowpoly-island-multiplayer
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MAX_PLAYERS
+        value: "16"
