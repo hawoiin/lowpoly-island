@@ -1120,13 +1120,29 @@
       if (!c || !msg) return;
       switch (msg.t) {
         case 'join': {
-          c.name = cleanName(msg.name) || '旅人';
+          const cleanPlayerName = cleanName(msg.name);
+          // クライアント側の入力制御だけに頼らず、空白・制御文字だけの名前もサーバーで拒否する。
+          if (!cleanPlayerName) {
+            this.out.sendTo(id, { t:'joinRejected', reason:'name-required' });
+            return;
+          }
+          c.name = cleanPlayerName;
           c.pid = hashKey(msg.key);
           if (!c.joined) {
             c.joined = true;
             this.out.broadcast({ t: 'join', id, name: c.name }, id);
           }
           this.out.sendTo(id, { t: 'joined', pid: c.pid, pickupOthers: this.pickupOthers });
+          break;
+        }
+        case 'attack': {
+          // 攻撃モーションは位置スナップショットのフラグ変化だけに頼らず、攻撃ごとに独立して通知する。
+          // 連打で「攻撃中→攻撃中」のままになると、低頻度のsnapでは立ち上がりを取り逃がすため。
+          if (!c.joined || c.dead) return;
+          const now = Date.now();
+          if (now - (c.lastAttackAt || 0) < 100) return;
+          c.lastAttackAt = now;
+          this.out.broadcast({ t: 'patk', id }, id);
           break;
         }
         case 'state': {

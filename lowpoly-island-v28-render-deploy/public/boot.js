@@ -20,7 +20,15 @@
   const statusEl = document.getElementById('netStatus');
   const startBtn = document.getElementById('startBtn');
   const nameInput = document.getElementById('nameInput');
+  let gameReady = false;
   try { nameInput.value = localStorage.getItem('lowpoly-island-name') || ''; } catch (e) { /* 保存できない環境 */ }
+  function updateStartAvailability() {
+    // 空白だけの名前は不許可。ゲーム生成が終わるまでは入力があっても開始できない。
+    startBtn.disabled = !gameReady || !nameInput.value.trim();
+  }
+  nameInput.addEventListener('input', updateStartAvailability);
+  nameInput.addEventListener('change', updateStartAvailability);
+  updateStartAvailability();
 
   // ---- ゲームへ渡すもの ----
   let handler = null;
@@ -39,7 +47,8 @@
       try {
         window.startGame(init);
         statusEl.textContent = online ? 'サーバーに接続しました' : 'ソロプレイ(サーバーに接続できなかったため)';
-        startBtn.disabled = false;
+        gameReady = true;
+        updateStartAvailability();
       } catch (err) {
         statusEl.textContent = '起動エラー: ' + err.message;
         console.error(err);

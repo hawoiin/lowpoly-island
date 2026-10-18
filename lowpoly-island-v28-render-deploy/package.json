@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/underwater.js && node test/enemies.js && node test/lighthouse.js && node test/spring.js && node test/camp.js && node test/grotto.js && node test/emergency-escape.js && node test/gate.js && node test/fence-collision.js && node test/save-format.js && node test/world-save-restore.js && node test/validation.js && node test/interaction-controls.js && node test/bulk-recovery.js && node test/bulk-world-selection.js && node test/smoke.js"
+    "test": "node test/underwater.js && node test/enemies.js && node test/lighthouse.js && node test/spring.js && node test/camp.js && node test/grotto.js && node test/emergency-escape.js && node test/gate.js && node test/fence-collision.js && node test/save-format.js && node test/world-save-restore.js && node test/validation.js && node test/interaction-controls.js && node test/bulk-recovery.js && node test/bulk-world-selection.js && node test/smoke.js && node test/name-emote.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

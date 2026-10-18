@@ -469,8 +469,8 @@
 
 <div id="startOverlay">
   <h1>探索の島</h1>
-  <p>WASD移動 / マウスで視点 / クリックで攻撃 / Eで採集・操作 / 建築物の回収はE長押し / Spaceジャンプ / Shiftダッシュ / Bでビルド / Cで図鑑 / Enterでチャット / 1〜4でエモート / Oで設定</p>
-  <input id="nameInput" type="text" maxlength="12" placeholder="名前(12文字まで)" autocomplete="off">
+  <p>WASD移動 / マウスで視点 / クリックで攻撃 / Eで採集・操作 / 建築物の回収はE長押し / Spaceジャンプ / Shiftダッシュ / Bでビルド / Cで図鑑 / Enterでチャット / 1 手を振る・2 ダンス・3 びっくり・4 ガッツポーズ / Oで設定</p>
+  <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
 </div>
@@ -4526,6 +4526,7 @@ window.startGame = function(NETINIT){
     // キャラは今向いている方向(最後に動いた向き)へそのまま振る。カメラの向きには合わせない
     swingT = 1;
     attackHitDone = false;
+    Net.send({ t:'attack' }); // 攻撃開始は位置スナップショットとは別イベントで確実に共有する
     sfx.swing();
 
     dashAttackActive = playerSprinting;
@@ -5858,6 +5859,9 @@ window.startGame = function(NETINIT){
     }
 
     // --- モーション: 歩行・ジャンプ・着地を手足に反映 ---
+    // エモートが終わったフレームで腕のねじれが残らないよう、通常姿勢から組み立て直す。
+    armL.rotation.z = 0;
+    armR.rotation.z = 0;
     landSquash = Math.max(0, landSquash - dt*4.5);
     {
       if (moveLen > 0 && grounded){
@@ -6195,7 +6199,7 @@ window.startGame = function(NETINIT){
       html = 'WASD 移動 / マウス位置で建築物を選択 / 右ドラッグで視点変更 / Enter まとめて回収 / Tab 一覧 / Esc 終了';
     } else if (document.pointerLockElement === renderer.domElement){
       html = 'WASD 移動 / Space ジャンプ / Shift ダッシュ / クリック 攻撃 / E 採集・操作<br>' +
-        'B ビルド / C 図鑑 / O 設定 / Enter チャット / 1〜4 エモート / Esc カーソルを出す';
+        'B ビルド / C 図鑑 / O 設定 / Enter チャット / 1 手を振る・2 ダンス・3 びっくり・4 ガッツポーズ / Esc カーソルを出す';
     } else if (isMenuOpen() || chatOpen()){
       html = 'Esc で閉じる';
     } else {
@@ -6208,10 +6212,17 @@ window.startGame = function(NETINIT){
 
   // ============ 開始オーバーレイ ============
   document.getElementById('startBtn').addEventListener('click', ()=>{
+    const nameInput = document.getElementById('nameInput');
+    const nm = String(nameInput.value || '').trim().slice(0, 12);
+    // ボタンのdisabled状態だけに依存せず、開始処理でも必ず名前を検証する。
+    if (!nm) {
+      document.getElementById('netStatus').textContent = '参加するには名前を入力してください';
+      nameInput.focus();
+      return;
+    }
     document.getElementById('startOverlay').style.display = 'none';
     if (!isTouch) lockPointer();
     updatePlayerHpBar();
-    const nm = (document.getElementById('nameInput').value || '').trim().slice(0, 12) || '旅人';
     myName = nm;
     try { localStorage.setItem('lowpoly-island-name', nm); } catch(e){}
     Net.send({ t:'join', name:nm, key:getPlayerKey() });
@@ -6329,8 +6340,10 @@ window.startGame = function(NETINIT){
   }
 
   // ============ チャット・エモート ============
-  // 吹き出しは頭上のスプライト。ログは画面左下に出して、しばらくしたら薄くする
-  const EMOTES = ['👋', '🎵', '❗', '❤️'];
+  // エモートは絵文字を描画せず、キャラクターの全身モーションとして再生する。
+  const EMOTE_LABELS = ['手を振る', 'ダンス', 'びっくり', 'ガッツポーズ'];
+  const EMOTE_DURATION = 1.6;
+  let playerEmoteId = -1, playerEmoteT = 0;
   const BUBBLE_SEC = 5, CHAT_LOG_MAX = 8, CHAT_LOG_FADE_MS = 9000;
   const chatLogEl = document.getElementById('chatLog');
   const chatBoxEl = document.getElementById('chatBox');
@@ -6389,24 +6402,25 @@ window.startGame = function(NETINIT){
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    const isEmote = EMOTES.includes(text);
-    ctx.font = (isEmote ? '64px' : 'bold 30px') + ' sans-serif';
+    ctx.font = 'bold 30px sans-serif';
     // 長い発言は2行まで(1行の目安: 幅に収まる文字数)
     const chars = Array.from(text), lines = [];
     let cur = '';
     for (const ch of chars){
-      if (ctx.measureText(cur + ch).width > 440 && cur){ lines.push(cur); cur = ch; } else cur += ch;
+      if (ctx.measureText(cur + ch).width > 440 && cur){ lines.push(cur); cur = ch; }
+      else cur += ch;
     }
     lines.push(cur);
     const shown = lines.slice(0, 2);
     if (lines.length > 2) shown[1] = shown[1].slice(0, -1) + '…';
     const w = Math.min(500, Math.max(...shown.map(l => ctx.measureText(l).width)) + 40);
-    const h = shown.length * (isEmote ? 76 : 38) + 20;
+    const lineHeight = 38;
+    const h = shown.length * lineHeight + 20;
     const x0 = (512 - w)/2, y0 = (128 - h)/2;
     ctx.fillStyle = 'rgba(255,248,230,0.94)';
     ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x0, y0, w, h, 18) : ctx.rect(x0, y0, w, h); ctx.fill();
     ctx.fillStyle = '#2a2016'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    shown.forEach((l, i) => ctx.fillText(l, 256, y0 + 10 + (i + 0.5) * (isEmote ? 76 : 38)));
+    shown.forEach((l, i) => ctx.fillText(l, 256, y0 + 10 + (i + 0.5) * lineHeight));
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(canvas), transparent:true, depthTest:false }));
     sp.scale.set(4, 1, 1);
     sp.position.y = 2.75;
@@ -6442,7 +6456,56 @@ window.startGame = function(NETINIT){
     addChatLine(m.name || '旅人', m.text);
     showBubble(holderFor(m.id), m.text);
   }
-  function onEmote(m){ showBubble(holderFor(m.id), EMOTES[m.e] || EMOTES[0]); }
+  function getEmotePose(id, elapsed){
+    const wave = Math.sin(elapsed * 12);
+    const dance = Math.sin(elapsed * 9);
+    const bounce = Math.abs(Math.sin(elapsed * 8));
+    // 角度はラジアン。単純な箱型アバターでも動きが読み取れる大きさにする。
+    switch (id){
+      case 0: // 手を振る
+        return { armLx:-0.75 + wave*0.14, armRx:0, armLz:2.55 + Math.sin(elapsed*13)*0.2, armRz:0,
+          legLx:0, legRx:0, torsoX:0, torsoY:0, torsoZ:Math.sin(elapsed*5)*0.035, bob:0.015 };
+      case 1: // ダンス
+        return { armLx:-0.35 + dance*0.25, armRx:-0.35 - dance*0.25,
+          armLz:2.05 + dance*0.22, armRz:-2.05 - dance*0.22,
+          legLx:Math.sin(elapsed*9)*0.38, legRx:-Math.sin(elapsed*9)*0.38,
+          torsoX:0, torsoY:dance*0.12, torsoZ:dance*0.12, bob:bounce*0.1 };
+      case 2: // びっくり
+        return { armLx:-0.95, armRx:-0.95, armLz:2.15, armRz:-2.15,
+          legLx:-0.28, legRx:-0.28, torsoX:-0.24 + Math.sin(elapsed*10)*0.025,
+          torsoY:0, torsoZ:0, bob:bounce*0.07 };
+      case 3: // ガッツポーズ
+      default:
+        return { armLx:-0.32 + wave*0.12, armRx:-0.32 - wave*0.12,
+          armLz:2.78 + Math.sin(elapsed*10)*0.16, armRz:-2.78 - Math.sin(elapsed*10)*0.16,
+          legLx:Math.sin(elapsed*8)*0.18, legRx:-Math.sin(elapsed*8)*0.18,
+          torsoX:0, torsoY:0, torsoZ:Math.sin(elapsed*8)*0.045, bob:bounce*0.11 };
+    }
+  }
+  function applyEmotePose(actor, id, elapsed){
+    if (!actor || !actor.torso) return;
+    const p = getEmotePose(id, elapsed);
+    actor.armL.rotation.x = p.armLx;
+    actor.armR.rotation.x = p.armRx;
+    actor.armL.rotation.z = p.armLz;
+    actor.armR.rotation.z = p.armRz;
+    actor.legL.rotation.x = p.legLx;
+    actor.legR.rotation.x = p.legRx;
+    actor.torso.rotation.x = p.torsoX;
+    actor.torso.rotation.y = p.torsoY;
+    actor.torso.rotation.z = p.torsoZ;
+    actor.torso.position.y = HIP_Y + p.bob;
+  }
+  function onEmote(m){
+    if (!Number.isInteger(m.e) || m.e < 0 || m.e >= EMOTE_LABELS.length) return;
+    if (m.id === NET_ID){
+      playerEmoteId = m.e;
+      playerEmoteT = EMOTE_DURATION;
+      return;
+    }
+    const r = remotes.get(m.id) || addRemote(m.id, '旅人');
+    if (r){ r.emoteId = m.e; r.emoteT = EMOTE_DURATION; }
+  }
 
   // ---- 他プレイヤーのアバター ----
   function makeNameSprite(name){
@@ -6520,7 +6583,8 @@ window.startGame = function(NETINIT){
     r = createAvatar(name, (id * 0.618034) % 1);
     r.id = id; r.name = name; r.cave = -1; r.flags = 0;
     r.tx = 0; r.ty = 0; r.tz = 0; r.tr = 0;
-    r.swingT = 0; r.lastSwing = false; r.walkCycle = 0; r.init = false; r.idle = Math.random()*6;
+    r.swingT = 0; r.swingQueue = 0; r.walkCycle = 0; r.init = false; r.idle = Math.random()*6;
+    r.emoteId = -1; r.emoteT = 0;
     remotes.set(id, r);
     updateNetInfo();
     return r;
@@ -6536,6 +6600,14 @@ window.startGame = function(NETINIT){
     updateNetInfo();
   }
 
+  function queueRemoteAttack(id){
+    if (id === NET_ID) return;
+    const r = remotes.get(id) || addRemote(id, '旅人');
+    if (!r) return;
+    if (r.swingT > 0) r.swingQueue = Math.min(8, r.swingQueue + 1);
+    else r.swingT = 1;
+  }
+
   function updateRemotes(dt){
     for (const r of remotes.values()){
       // 相手のいる場所(屋外 or どの洞窟か)のシーンに置く。洞窟の座標系は別なので、移したら位置も一気に合わせる
@@ -6547,6 +6619,10 @@ window.startGame = function(NETINIT){
         r.init = true;
       }
       const g = r.group;
+      // 前フレームのエモートの姿勢を残さず、通常姿勢から毎フレーム再計算する。
+      r.armL.rotation.z = 0; r.armR.rotation.z = 0;
+      r.torso.rotation.x = 0; r.torso.rotation.y = 0; r.torso.rotation.z = 0;
+      r.torso.position.y = HIP_Y;
       const px = g.position.x, pz = g.position.z;
       const k = Math.min(1, dt*12);
       g.position.x += (r.tx - g.position.x) * k;
@@ -6559,9 +6635,7 @@ window.startGame = function(NETINIT){
       const f = r.flags;
       const speed = Math.hypot(g.position.x - px, g.position.z - pz) / Math.max(dt, 0.0001);
       const moving = (f & 16) || speed > 0.8;
-      const air = f & 4, sprint = f & 2, swing = f & 1, dead = f & 8;
-      if (swing && !r.lastSwing) r.swingT = 1;
-      r.lastSwing = !!swing;
+      const air = f & 4, sprint = f & 2, dead = f & 8;
 
       // 倒れている間は横になる
       const tiltTarget = dead ? -Math.PI/2 : 0;
@@ -6593,9 +6667,19 @@ window.startGame = function(NETINIT){
         r.armR.rotation.x = -s*2.5;
         r.armR.rotation.z = -s*1.1;
         r.torso.rotation.y = s*0.28;
+        // 前のモーション中に次の攻撃イベントが届いた場合も、攻撃を1回ずつ再生する。
+        if (r.swingT <= 0 && r.swingQueue > 0){
+          r.swingQueue--;
+          r.swingT = 1;
+        }
       } else {
         r.armR.rotation.z = 0;
         r.torso.rotation.y = 0;
+      }
+      // 攻撃中は剣の動きを優先。エモート時間は減らさず、攻撃後に全身モーションを再生する。
+      if (r.emoteT > 0 && r.swingT <= 0 && !dead){
+        applyEmotePose(r, r.emoteId, EMOTE_DURATION - r.emoteT);
+        r.emoteT = Math.max(0, r.emoteT - dt);
       }
     }
   }
@@ -6720,6 +6804,7 @@ window.startGame = function(NETINIT){
     try {
       switch (m.t){
         case 'snap': applySnap(m); break;
+        case 'patk': queueRemoteAttack(m.id); break;
         case 'taken': applyTaken(m.key, m.by === NET_ID); break;
         case 'takeDenied': { const c = collectibleByKey.get(m.key); if (c) c.pending = false; break; }
         case 'respawn': {
@@ -6844,6 +6929,13 @@ window.startGame = function(NETINIT){
           break;
         }
         case 'joined': myPid = m.pid; pickupOthers = !!m.pickupOthers; break;
+        case 'joinRejected': {
+          gameStarted = false;
+          document.getElementById('startOverlay').style.display = 'flex';
+          document.getElementById('netStatus').textContent = '参加するには名前を入力してください';
+          document.getElementById('nameInput').focus();
+          break;
+        }
         case 'removed': removeStructure(m.sid, m.by === NET_ID); break;
         case 'gateState': {
           const mesh = placedStructures.find(s => s.userData.sid === m.sid);
@@ -7160,6 +7252,11 @@ window.startGame = function(NETINIT){
       } else {
         armR.rotation.z = 0;
         torso.rotation.y = 0;
+      }
+      // 自分のキャラクターも、サーバーから届いたエモートイベントに合わせて全身で動く。
+      if (playerEmoteT > 0 && swingT <= 0 && !playerDead){
+        applyEmotePose({ torso, armL, armR, legL, legR }, playerEmoteId, EMOTE_DURATION - playerEmoteT);
+        playerEmoteT = Math.max(0, playerEmoteT - realDt);
       }
       updateCamera(dt);
       updateBulkRecoverWorldTarget();
