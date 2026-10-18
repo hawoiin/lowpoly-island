@@ -6463,7 +6463,8 @@ window.startGame = function(NETINIT){
     // 角度はラジアン。単純な箱型アバターでも動きが読み取れる大きさにする。
     switch (id){
       case 0: // 手を振る
-        return { armLx:-0.75 + wave*0.14, armRx:0, armLz:2.55 + Math.sin(elapsed*13)*0.2, armRz:0,
+        // 上腕を前後へ大きく倒さず、肩から自然に横上へ上げる。手振りの周期・振れ幅は維持する。
+        return { armLx:0, armRx:0, armLz:2.55 + Math.sin(elapsed*13)*0.2, armRz:0,
           legLx:0, legRx:0, torsoX:0, torsoY:0, torsoZ:Math.sin(elapsed*5)*0.035, bob:0.015 };
       case 1: // ダンス
         return { armLx:-0.35 + dance*0.25, armRx:-0.35 - dance*0.25,

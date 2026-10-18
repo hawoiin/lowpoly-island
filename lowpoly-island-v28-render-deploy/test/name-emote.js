@@ -42,6 +42,7 @@ const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8
 const boot = fs.readFileSync(path.join(__dirname, '../public/boot.js'), 'utf8');
 check('クライアントは空欄/空白の名前で開始処理を進めない', html.includes('if (!nm) {') && boot.includes('!nameInput.value.trim()'));
 check('エモートはUnicode絵文字ではなく全身モーションに接続されている', !html.includes("const EMOTES = ['👋'") && html.includes('function applyEmotePose') && html.includes("case 'emote': onEmote(m); break;"));
+check('手を振る姿勢で上腕が後方へ大きく倒れない', html.includes('return { armLx:0, armRx:0, armLz:2.55 + Math.sin(elapsed*13)*0.2, armRz:0,'));
 
 if (fails) process.exit(1);
 console.log('Name/emote regression tests passed.');
