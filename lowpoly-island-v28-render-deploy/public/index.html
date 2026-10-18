@@ -147,6 +147,26 @@
   #saveToolsButtons button:first-child { background:#e8c07d; color:#241a0d; border:0; }
   #saveAdminKey { box-sizing:border-box; width:100%; margin-top:6px; background:rgba(0,0,0,.2); color:#f5f0e6; border:1px solid rgba(255,255,255,.18); border-radius:8px; padding:8px 10px; font-size:12px; }
   #saveAdminKey:focus { outline:1px solid #e8c07d; }
+  #adminTools { margin:18px 0 12px; padding:14px; border:1px solid rgba(232,192,125,.28); border-radius:12px; background:rgba(232,192,125,.045); }
+  #adminTools h3 { margin:0 0 6px; font-size:13px; }
+  #adminTools p { font-size:11px; line-height:1.55; opacity:.72; margin:0 0 10px; }
+  #adminAuthButtons, #adminWorldButtons, #adminListHeader { display:flex; gap:8px; align-items:center; }
+  #adminTools button { min-width:0; padding:9px 8px; border-radius:9px; border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.08); color:#f5f0e6; font-size:11px; font-weight:700; cursor:pointer; }
+  #adminTools button:disabled { opacity:.38; cursor:default; }
+  #adminLoginButton { flex:1; background:#e8c07d !important; border:0 !important; color:#241a0d !important; }
+  #adminAuthStatus, #adminPlayersStatus { display:block; margin-top:8px; font-size:10px; line-height:1.45; opacity:.72; }
+  #adminPanel { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.12); }
+  #adminListHeader { justify-content:space-between; font-size:12px; margin-bottom:8px; }
+  #adminPlayerList { display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; }
+  .adminPlayerRow { display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.08); }
+  .adminPlayerInfo { min-width:0; flex:1; }
+  .adminPlayerName { display:block; font-size:12px; font-weight:700; overflow-wrap:anywhere; }
+  .adminPlayerMeta { display:block; font-size:10px; opacity:.55; margin-top:2px; }
+  .adminKickButton { color:#ffd0c8 !important; border-color:rgba(255,120,100,.35) !important; }
+  #adminWorldTools { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.12); }
+  #adminWorldButtons button { flex:1; }
+  #adminRestoreButton { border-color:rgba(255,150,120,.35) !important; color:#ffd0c8 !important; }
+  #adminWorldNote { display:block; margin-top:8px; font-size:10px; opacity:.58; line-height:1.45; }
   #hurtFlash {
     position:fixed; inset:0; z-index:8; pointer-events:none; opacity:0;
     background:radial-gradient(ellipse at center, rgba(200,30,20,0) 45%, rgba(200,30,20,.55) 100%);
@@ -588,9 +608,32 @@
         <button id="saveImportButton" type="button">読み込む</button>
       </div>
       <input id="saveImportFile" type="file" accept=".json,application/json" hidden>
-      <label for="saveAdminKey" style="display:block;font-size:11px;opacity:.8;margin-top:12px">共有ワールド復元キー（オンライン用・任意）</label>
-      <input id="saveAdminKey" type="password" maxlength="256" autocomplete="off" spellcheck="false" placeholder="サーバー管理者キー">
-      <p style="margin-top:7px;margin-bottom:0">オンラインでワールドも復元するには、サーバー起動時の管理者キーが必要です。共有ワールドの復元は参加者全員に影響します。キーが空欄の場合はプレイヤーデータと設定だけを復元します。</p>
+    </section>
+    <section id="adminTools">
+      <h3>ワールド管理（管理者専用）</h3>
+      <p>Renderの環境変数 <b>SAVE_ADMIN_TOKEN</b> に設定した値を入力して認証します。キーはこのブラウザに保存されません。</p>
+      <label for="saveAdminKey" style="display:block;font-size:11px;opacity:.8;margin-top:8px">管理者キー</label>
+      <input id="saveAdminKey" type="password" maxlength="256" autocomplete="off" spellcheck="false" placeholder="SAVE_ADMIN_TOKEN の値">
+      <div id="adminAuthButtons" style="margin-top:8px">
+        <button id="adminLoginButton" type="button">管理者として認証</button>
+        <button id="adminLogoutButton" type="button" hidden>ログアウト</button>
+      </div>
+      <small id="adminAuthStatus" aria-live="polite">未認証。管理者キーを入力してください。</small>
+      <div id="adminPanel" hidden>
+        <div id="adminListHeader"><strong>オンラインプレイヤー</strong><button id="adminRefreshButton" type="button">一覧を更新</button></div>
+        <div id="adminPlayersStatus" aria-live="polite">一覧を取得しています…</div>
+        <div id="adminPlayerList"></div>
+        <div id="adminWorldTools">
+          <strong style="font-size:12px">共有ワールドのバックアップ</strong>
+          <p style="margin-top:5px">現在の地形シード・建築物・宝箱状態をJSONファイルとして手元に保存します。</p>
+          <div id="adminWorldButtons">
+            <button id="adminBackupButton" type="button">今すぐバックアップ</button>
+            <button id="adminRestoreButton" type="button">バックアップから復元</button>
+          </div>
+          <input id="adminRestoreFile" type="file" accept=".json,application/json" hidden>
+          <small id="adminWorldNote">復元は参加者全員に影響します。復元前に現在のワールドを自動でバックアップします。</small>
+        </div>
+      </div>
     </section>
     <button id="settingsClose">閉じる</button>
   </div>
@@ -5149,6 +5192,18 @@ window.startGame = function(NETINIT){
   let saveRequestSeq = 0;
   let pendingSaveExport = null;
   let pendingWorldImport = null;
+  let adminRequestSeq = 0;
+  let adminAuthenticated = false;
+  let adminSessionRequested = false;
+  let pendingAdminBackup = null;
+  let pendingAdminWorldRestore = null;
+  const adminAuthStatus = document.getElementById('adminAuthStatus');
+  const adminPanel = document.getElementById('adminPanel');
+  const adminPlayersStatus = document.getElementById('adminPlayersStatus');
+  const adminPlayerList = document.getElementById('adminPlayerList');
+  const adminLoginButton = document.getElementById('adminLoginButton');
+  const adminLogoutButton = document.getElementById('adminLogoutButton');
+  const adminRestoreFile = document.getElementById('adminRestoreFile');
   let emergencyEscapeRequestSeq = 0;
   let pendingEmergencyEscape = null;
   let emergencyEscapeCooldownUntil = 0;
@@ -6804,6 +6859,65 @@ window.startGame = function(NETINIT){
   function handleNet(m){
     try {
       switch (m.t){
+        case 'adminAuthResult': {
+          adminAuthenticated = !!m.ok;
+          adminPanel.hidden = !adminAuthenticated;
+          adminLoginButton.hidden = adminAuthenticated;
+          adminLogoutButton.hidden = !adminAuthenticated;
+          adminAuthStatus.textContent = adminAuthenticated ? '管理者として認証済みです。' : (m.reason === 'rateLimit' ? '認証の試行回数が多すぎます。1分待ってください。' : '認証に失敗しました。管理者キーを確認してください。');
+          if (adminAuthenticated) { showToast('管理者として認証しました', '管理'); requestAdminPlayers(); }
+          else { adminSessionRequested = false; adminPlayerList.replaceChildren(); }
+          break;
+        }
+        case 'adminPlayersResult': {
+          if (!adminAuthenticated) break;
+          renderAdminPlayers(Array.isArray(m.players) ? m.players : []);
+          break;
+        }
+        case 'adminKickResult': {
+          if (!m.ok) { showToast(m.reason === 'self' ? '自分自身はキックできません' : 'プレイヤーを退出させられませんでした', '管理'); break; }
+          showToast(`${m.name || 'プレイヤー'}を退出させました`, '管理');
+          setTimeout(requestAdminPlayers, 250);
+          break;
+        }
+        case 'adminWorldBackupResult': {
+          if (!pendingAdminBackup || m.requestId !== pendingAdminBackup.requestId) break;
+          clearTimeout(pendingAdminBackup.timer); pendingAdminBackup = null;
+          if (!m.ok || !m.world) { showToast(m.reason === 'backupTooLarge' ? 'ワールドが120KBを超えているためバックアップを作成できません。建築物を整理してから再試行してください。' : '共有ワールドをバックアップできませんでした', '管理'); break; }
+          try { downloadAdminWorldBackup(m.world, m.savedAt); showToast('共有ワールドのバックアップを保存しました', '管理'); }
+          catch (err) { showToast('バックアップを作成できませんでした: ' + err.message, '管理'); }
+          break;
+        }
+        case 'adminWorldRestoreResult': {
+          if (!pendingAdminWorldRestore || m.requestId !== pendingAdminWorldRestore.requestId) break;
+          clearTimeout(pendingAdminWorldRestore.timer);
+          const restoreOp = pendingAdminWorldRestore; pendingAdminWorldRestore = null;
+          if (!m.ok) {
+            const reasons = { unauthorized:'管理者認証が切れています。もう一度認証してください。', invalid:'バックアップの内容が不正です。', layout:'ゲームの配置バージョンが異なります。', seedMismatch:'ワールドのシードが一致しません。', unavailable:'現在は復元できません。', rateLimit:'操作が続きすぎています。少し待ってください。', backupTooLarge:'復元前の自動バックアップが120KBを超えるため、ワールドを変更せず中止しました。建築物を整理してからバックアップしてください。' };
+            showToast('復元失敗: ' + (reasons[m.reason] || '不明なエラー'), '管理');
+            break;
+          }
+          // 復元前のワールドをサーバーから受け取り、自動ダウンロードして戻せるようにする。
+          if (m.beforeWorld) {
+            try { downloadAdminWorldBackup(m.beforeWorld, m.beforeSavedAt || new Date().toISOString(), 'pre-restore'); }
+            catch (err) { showToast('復元前バックアップの自動保存に失敗しました: ' + err.message, '管理'); }
+          }
+          showToast(`共有ワールドを復元しました（建築物 ${m.structures || 0}件）。復元前のバックアップも保存しました。`, '管理');
+          if (restoreOp.seedChanged) setTimeout(()=>location.reload(), 400);
+          else setTimeout(requestAdminPlayers, 250);
+          break;
+        }
+        case 'adminLoggedOut': {
+          adminAuthenticated = false; adminSessionRequested = false; adminPanel.hidden = true;
+          adminLoginButton.hidden = false; adminLogoutButton.hidden = true;
+          adminAuthStatus.textContent = 'ログアウトしました。'; adminPlayerList.replaceChildren();
+          break;
+        }
+        case 'kicked': {
+          netLost = true; netReconnecting = false; updateNetInfo();
+          showToast('管理者によって島から退出させられました。再参加するにはページを再読み込みしてください。', '退出');
+          break;
+        }
         case 'snap': applySnap(m); break;
         case 'patk': queueRemoteAttack(m.id); break;
         case 'taken': applyTaken(m.key, m.by === NET_ID); break;
@@ -6903,8 +7017,9 @@ window.startGame = function(NETINIT){
           if (!m.world) break;
           saveProgress();
           if (m.seedChanged || m.world.seed !== NETINIT.welcome.seed) {
-            // ワールド復元を自分で要求中なら、結果応答後にプレイヤーデータを適用してから再読み込みする。
+            // ワールド復元を自分で要求中なら、結果応答後に必要な再読み込みを行う。
             if (pendingWorldImport) pendingWorldImport.seedChanged = true;
+            else if (pendingAdminWorldRestore) pendingAdminWorldRestore.seedChanged = true;
             else {
               showToast('共有ワールドを復元しました。島を再読み込みします', 'セーブ');
               setTimeout(()=>location.reload(), 250);
@@ -6968,17 +7083,33 @@ window.startGame = function(NETINIT){
         }
         case 'netState':
           netReconnecting = m.state === 'reconnecting';
+          if (adminAuthenticated) {
+            adminAuthenticated = false; adminPanel.hidden = true;
+            adminLoginButton.hidden = false; adminLogoutButton.hidden = true;
+            adminAuthStatus.textContent = '再接続中です。接続が戻ったら管理者認証を確認します。';
+          }
           for (const id of [...remotes.keys()]) removeRemote(id); // 切れている間は他のプレイヤーを表示しない
           updateNetInfo();
           break;
         case 'welcome': // 再接続できた: 最新の世界に合わせ直し、参加し直す
           netReconnecting = false; netLost = false;
+          // 管理者として認証済みだった場合だけ、再接続した新しいソケットで再認証を試みる。
+          if (adminSessionRequested && document.getElementById('saveAdminKey').value.trim()) {
+            Net.send({ t:'adminAuth', token:document.getElementById('saveAdminKey').value.trim() });
+          } else if (adminAuthenticated) {
+            adminAuthenticated = false; adminPanel.hidden = true; adminAuthStatus.textContent = '再接続しました。管理者認証をやり直してください。';
+          }
           applyWelcome(m);
           if (gameStarted) Net.send({ t:'join', name:myName, key:getPlayerKey() });
           updateNetInfo();
           showToast('再接続しました', '接続');
           break;
-        case 'disconnected': netLost = true; netReconnecting = false; updateNetInfo(); break;
+        case 'disconnected':
+          netLost = true; netReconnecting = false;
+          adminAuthenticated = false; adminSessionRequested = false; adminPanel.hidden = true;
+          adminLoginButton.hidden = false; adminLogoutButton.hidden = true;
+          if (NETINIT.online) adminAuthStatus.textContent = 'サーバーとの接続が切れました。再読み込み後に接続してください。';
+          updateNetInfo(); break;
       }
     } catch(err){ reportErr(err); }
   }
@@ -7173,6 +7304,98 @@ window.startGame = function(NETINIT){
       if (fileInput) fileInput.value = '';
     }
   }
+  function requestAdminPlayers(){
+    if (!adminAuthenticated || !NETINIT.online) return;
+    adminPlayersStatus.textContent = '一覧を更新しています…';
+    Net.send({ t:'adminPlayers' });
+  }
+  function formatOnlineDuration(seconds){
+    const n = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (n < 60) return `${n}秒`; if (n < 3600) return `${Math.floor(n/60)}分${n%60}秒`;
+    return `${Math.floor(n/3600)}時間${Math.floor((n%3600)/60)}分`;
+  }
+  function renderAdminPlayers(players){
+    adminPlayerList.replaceChildren();
+    adminPlayersStatus.textContent = `オンライン参加者 ${players.length}人`;
+    if (!players.length) {
+      const empty = document.createElement('div'); empty.className = 'adminPlayerMeta'; empty.textContent = '現在、参加中のプレイヤーはいません。';
+      adminPlayerList.appendChild(empty); return;
+    }
+    for (const info of players){
+      const row = document.createElement('div'); row.className = 'adminPlayerRow';
+      const details = document.createElement('div'); details.className = 'adminPlayerInfo';
+      const name = document.createElement('span'); name.className = 'adminPlayerName';
+      name.textContent = String(info.name || '旅人') + (info.id === NET_ID ? '（自分）' : '');
+      const meta = document.createElement('span'); meta.className = 'adminPlayerMeta';
+      meta.textContent = `接続ID ${Number(info.id) || '?'} · 参加 ${formatOnlineDuration(info.secondsOnline)}${info.cave ? ' · 洞窟内' : ''}`;
+      details.append(name, meta); row.appendChild(details);
+      const kick = document.createElement('button'); kick.className = 'adminKickButton'; kick.type = 'button'; kick.textContent = 'キック';
+      kick.disabled = info.id === NET_ID;
+      kick.title = kick.disabled ? '自分自身は退出させられません' : 'このプレイヤーを島から退出させます';
+      kick.addEventListener('click', ()=>{
+        if (!adminAuthenticated || kick.disabled) return;
+        if (!window.confirm(`${String(info.name || 'このプレイヤー')}を島から退出させますか？
+この操作はプレイヤーのゲーム接続を切断します。ページを再読み込みすると再参加できます。`)) return;
+        Net.send({ t:'adminKick', targetId:info.id });
+      });
+      row.appendChild(kick); adminPlayerList.appendChild(row);
+    }
+  }
+  function downloadAdminWorldBackup(world, savedAt, suffix=''){
+    const text = JSON.stringify({ format:'lowpoly-island-world-backup', version:1, savedAt:savedAt || new Date().toISOString(), world }, null, 2);
+    if (new Blob([text]).size > 120 * 1024) throw new Error('バックアップが120KBを超えています');
+    const blob = new Blob([text], { type:'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0,19);
+    a.href = url; a.download = `lowpoly-island-world-${suffix ? suffix + '-' : ''}${stamp}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+  function requestAdminBackup(){
+    if (!adminAuthenticated) { showToast('先に管理者認証を行ってください', '管理'); return; }
+    if (pendingAdminBackup) { showToast('バックアップを作成中です', '管理'); return; }
+    const requestId = ++adminRequestSeq;
+    const timer = setTimeout(()=>{
+      if (pendingAdminBackup && pendingAdminBackup.requestId === requestId) { pendingAdminBackup = null; showToast('バックアップ応答がありません。接続を確認してください', '管理'); }
+    }, 8000);
+    pendingAdminBackup = { requestId, timer };
+    Net.send({ t:'adminWorldBackup', requestId });
+  }
+  async function importAdminWorldBackup(file){
+    if (!file) return;
+    try {
+      if (!adminAuthenticated) throw new Error('先に管理者認証を行ってください');
+      if (file.size > 120 * 1024) throw new Error('ファイルが120KBを超えています');
+      const payload = JSON.parse(await file.text());
+      if (!payload || payload.format !== 'lowpoly-island-world-backup' || payload.version !== 1 || !payload.world) throw new Error('共有ワールドのバックアップファイルではありません');
+      const world = payload.world;
+      if (!window.confirm(`共有ワールドを復元しますか？
+シード: ${String(world.seed)}
+建築物: ${Array.isArray(world.structures) ? world.structures.length : '?'}件
+この操作は全参加者に影響します。復元前のワールドは自動でバックアップされます。`)) return;
+      const requestId = ++adminRequestSeq;
+      const timer = setTimeout(()=>{
+        if (pendingAdminWorldRestore && pendingAdminWorldRestore.requestId === requestId){ pendingAdminWorldRestore = null; showToast('復元応答がありません。接続を確認してください', '管理'); }
+      }, 10000);
+      pendingAdminWorldRestore = { requestId, timer, seedChanged:false };
+      Net.send({ t:'adminWorldRestore', requestId, world });
+      showToast('共有ワールドの復元を確認しています', '管理');
+    } catch (err) { showToast('バックアップを読み込めません: ' + (err && err.message ? err.message : err), '管理'); }
+    finally { adminRestoreFile.value = ''; }
+  }
+  adminLoginButton.addEventListener('click', ()=>{
+    if (!NETINIT.online) { adminAuthStatus.textContent = 'オンライン接続時のみ管理者機能を使用できます。'; return; }
+    const token = document.getElementById('saveAdminKey').value.trim();
+    if (!token) { adminAuthStatus.textContent = '管理者キーを入力してください。'; document.getElementById('saveAdminKey').focus(); return; }
+    adminSessionRequested = true; adminAuthenticated = false; adminPanel.hidden = true;
+    adminAuthStatus.textContent = '管理者キーを確認しています…';
+    Net.send({ t:'adminAuth', token });
+  });
+  adminLogoutButton.addEventListener('click', ()=>{ Net.send({ t:'adminLogout' }); adminAuthenticated = false; adminSessionRequested = false; adminPanel.hidden = true; adminLoginButton.hidden = false; adminLogoutButton.hidden = true; document.getElementById('saveAdminKey').value = ''; adminAuthStatus.textContent = 'ログアウトしました。'; adminPlayerList.replaceChildren(); });
+  document.getElementById('adminRefreshButton').addEventListener('click', requestAdminPlayers);
+  document.getElementById('adminBackupButton').addEventListener('click', requestAdminBackup);
+  document.getElementById('adminRestoreButton').addEventListener('click', ()=>adminRestoreFile.click());
+  adminRestoreFile.addEventListener('change', event=>importAdminWorldBackup(event.target.files && event.target.files[0]));
+
   document.getElementById('saveExportButton').addEventListener('click', exportSaveBundle);
   document.getElementById('saveImportButton').addEventListener('click', ()=>document.getElementById('saveImportFile').click());
   document.getElementById('saveImportFile').addEventListener('change', event=>{

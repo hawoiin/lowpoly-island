@@ -117,6 +117,13 @@
       ws.onmessage = ev => {
         if (ws !== cur) return;
         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.t === 'kicked' && welcomed) {
+          // 管理者による退出は通常の通信断と区別し、自動再接続を止める。
+          deliver(m);
+          cur = null;
+          try { ws.close(4001, 'kicked'); } catch (_) {}
+          return;
+        }
         if (m.t === 'welcome' && !welcomed) {
           welcomed = true; clearTimeout(guard);
           attempt = 0; giveUpAt = 0;

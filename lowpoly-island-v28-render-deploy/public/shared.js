@@ -1087,7 +1087,7 @@
     // ---- 接続管理 ----
     addClient(id) {
       this.clients.set(id, {
-        id, name: '', pid: '', joined: false, lastChatAt: 0,
+        id, name: '', pid: '', joined: false, joinedAt: 0, lastChatAt: 0,
         x: 0, y: 0, z: 6, ry: 0, cave: -1, flags: 0, dead: false,
         hasState: false, lastStateAt: 0, clientTime: null, clientTimeOrigin: null, serverTimeOrigin: null, lastHitAt: new Map(),
         lastGateToggleAt: 0,
@@ -1129,6 +1129,7 @@
           c.name = cleanPlayerName;
           c.pid = hashKey(msg.key);
           if (!c.joined) {
+            c.joinedAt = Date.now();
             c.joined = true;
             this.out.broadcast({ t: 'join', id, name: c.name }, id);
           }

@@ -12,7 +12,7 @@ const MAX_PLAYERS = +process.env.MAX_PLAYERS || 16;
 const PUBLIC = path.join(__dirname, 'public');
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, 'world.json');
 const PICKUP_OTHERS = process.env.PICKUP_OTHERS === '1'; // 1 なら他人の建築物も回収できる(既定は建てた人だけ)
-// 共有ワールドのインポートは全員に影響するため、サーバー側の管理者キーを要求する。
+// 管理操作と共有ワールドの復元は全員に影響するため、サーバー側の管理者キーを要求する。
 // 未指定ならサーバー起動ごとに推測不能なキーを生成し、ホストのコンソールにだけ表示する。
 const SAVE_ADMIN_TOKEN = process.env.SAVE_ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
 
@@ -33,6 +33,27 @@ sim.out = {
     for (const [id, ws] of sockets) if (id !== except && ws.readyState === 1) ws.send(s);
   },
 };
+function sendJson(ws, message) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(message));
+}
+function adminPlayersSnapshot() {
+  const now = Date.now();
+  return [...sim.clients.values()].filter(c => c.joined).map(c => ({
+    id:c.id, name:c.name, secondsOnline:Math.max(0, Math.floor((now - (c.joinedAt || now)) / 1000)), cave:c.cave >= 0,
+  }));
+}
+function sendAdminPlayers(ws) {
+  if (!ws || !ws.isAdmin) return;
+  sendJson(ws, { t:'adminPlayersResult', players:adminPlayersSnapshot() });
+}
+function broadcastAdminPlayers() {
+  for (const ws of sockets.values()) if (ws.isAdmin && ws.readyState === 1) sendAdminPlayers(ws);
+}
+function tokenMatches(value) {
+  const supplied = typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.alloc(0);
+  const expected = Buffer.from(SAVE_ADMIN_TOKEN, 'utf8');
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -61,9 +82,12 @@ wss.on('connection', ws => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
+  ws.isAdmin = false;
   let budget = 120; // 1秒あたりの受信上限(スパム対策)
   let lastSaveOperationAt = 0;
   let lastLargePayloadAt = 0;
+  let authWindowAt = Date.now();
+  let authAttempts = 0;
   const refill = setInterval(() => { budget = 120; }, 1000);
 
   ws.send(JSON.stringify(sim.addClient(id)));
@@ -81,8 +105,80 @@ wss.on('connection', ws => {
     let m;
     try { m = JSON.parse(data.toString()); } catch (e) { return; }
     if (!m || typeof m.t !== 'string') return;
-    if (payloadBytes > 2048 && m.t !== 'worldImport') return;
+    if (payloadBytes > 2048 && m.t !== 'worldImport' && m.t !== 'adminWorldRestore') return;
     try {
+      if (m.t === 'adminAuth') {
+        const now = Date.now();
+        if (now - authWindowAt >= 60000) { authWindowAt = now; authAttempts = 0; }
+        if (++authAttempts > 5) {
+          ws.isAdmin = false;
+          sendJson(ws, { t:'adminAuthResult', ok:false, reason:'rateLimit' });
+          return;
+        }
+        ws.isAdmin = tokenMatches(m.token);
+        sendJson(ws, { t:'adminAuthResult', ok:ws.isAdmin, reason:ws.isAdmin ? undefined : 'unauthorized' });
+        return;
+      }
+      if (m.t === 'adminLogout') {
+        ws.isAdmin = false;
+        sendJson(ws, { t:'adminLoggedOut' });
+        return;
+      }
+      if (m.t === 'adminPlayers') {
+        if (!ws.isAdmin) { sendJson(ws, { t:'adminAuthResult', ok:false, reason:'unauthorized' }); return; }
+        sendAdminPlayers(ws);
+        return;
+      }
+      if (m.t === 'adminKick') {
+        if (!ws.isAdmin) { sendJson(ws, { t:'adminKickResult', ok:false, reason:'unauthorized' }); return; }
+        const targetId = Number.isSafeInteger(m.targetId) ? m.targetId : -1;
+        if (targetId === id) { sendJson(ws, { t:'adminKickResult', ok:false, reason:'self' }); return; }
+        const targetState = sim.clients.get(targetId);
+        const targetWs = sockets.get(targetId);
+        if (!targetState || !targetState.joined || !targetWs || targetWs.readyState !== 1) {
+          sendJson(ws, { t:'adminKickResult', ok:false, reason:'notFound' }); return;
+        }
+        sendJson(ws, { t:'adminKickResult', ok:true, targetId, name:targetState.name });
+        // クライアントへ理由を知らせ、自動再接続ループに入らず画面を止める。
+        sendJson(targetWs, { t:'kicked', reason:'admin' });
+        setTimeout(() => { try { if (targetWs.readyState === 1) targetWs.close(4001, 'kicked by administrator'); } catch (_) {} }, 50);
+        setTimeout(broadcastAdminPlayers, 150);
+        return;
+      }
+      if (m.t === 'adminWorldBackup') {
+        if (!ws.isAdmin) { sendJson(ws, { t:'adminWorldBackupResult', requestId:m.requestId, ok:false, reason:'unauthorized' }); return; }
+        const now = Date.now();
+        if (now - lastSaveOperationAt < 1200) { sendJson(ws, { t:'adminWorldBackupResult', requestId:m.requestId, ok:false, reason:'rateLimit' }); return; }
+        lastSaveOperationAt = now;
+        const world = sim.serialize();
+        const savedAt = new Date().toISOString();
+        const envelope = { format:'lowpoly-island-world-backup', version:1, savedAt, world };
+        if (Buffer.byteLength(JSON.stringify(envelope, null, 2), 'utf8') > 120 * 1024) {
+          sendJson(ws, { t:'adminWorldBackupResult', requestId:m.requestId, ok:false, reason:'backupTooLarge' }); return;
+        }
+        sendJson(ws, { t:'adminWorldBackupResult', requestId:m.requestId, ok:true, savedAt, world });
+        return;
+      }
+      if (m.t === 'adminWorldRestore') {
+        const requestId = Number.isSafeInteger(m.requestId) && m.requestId >= 0 ? m.requestId : null;
+        if (!ws.isAdmin) { sendJson(ws, { t:'adminWorldRestoreResult', requestId, ok:false, reason:'unauthorized' }); return; }
+        const now = Date.now();
+        if (now - lastSaveOperationAt < 1200) { sendJson(ws, { t:'adminWorldRestoreResult', requestId, ok:false, reason:'rateLimit' }); return; }
+        lastSaveOperationAt = now;
+        // 復元前の状態をレスポンスに含め、管理者ブラウザへ自動保存させる。
+        const beforeWorld = sim.serialize();
+        const beforeSavedAt = new Date().toISOString();
+        // 復元前バックアップをブラウザへ確実に渡せない大きさなら、ワールドを変更しない。
+        const beforeBackupBytes = Buffer.byteLength(JSON.stringify({ format:'lowpoly-island-world-backup', version:1, savedAt:beforeSavedAt, world:beforeWorld }, null, 2), 'utf8');
+        if (beforeBackupBytes > 120 * 1024) {
+          sendJson(ws, { t:'adminWorldRestoreResult', requestId, ok:false, reason:'backupTooLarge' });
+          return;
+        }
+        const result = sim.restoreWorld(m.world);
+        sendJson(ws, Object.assign({ t:'adminWorldRestoreResult', requestId, beforeWorld:result.ok ? beforeWorld : undefined, beforeSavedAt }, result));
+        if (result.ok) save();
+        return;
+      }
       if (m.t === 'saveExport' || m.t === 'worldImport') {
         const now = Date.now();
         if (now - lastSaveOperationAt < 1200) {
@@ -110,12 +206,14 @@ wss.on('connection', ws => {
         return;
       }
       sim.handle(id, m);
+      if (m.t === 'join') broadcastAdminPlayers();
     } catch (e) { console.error('handle error', e); }
   });
   ws.on('close', () => {
     clearInterval(refill);
     sockets.delete(id);
     sim.removeClient(id);
+    broadcastAdminPlayers();
   });
   ws.on('error', () => {});
 });
