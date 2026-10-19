@@ -13,6 +13,6 @@ const cave = start >= 0 && end > start ? html.slice(start, end) : '';
 check('地上洞窟の内部に中央祭壇・石柱・奥壁の刻印・石畳がある', cave.includes('const altar = new THREE.Group()') && cave.includes('for (const [px,pz,rot] of [[') && cave.includes('const backPanel = new THREE.Mesh') && cave.includes('const runeGlow =') && cave.includes('const tile = new THREE.Mesh(roughen(new THREE.BoxGeometry(2.8'));
 check('装飾の追加後も既存のenterCave/exitCave処理が存在する', html.includes('function enterCave(idx){') && html.includes('function exitCave(){') && html.includes('sfx.enterCave();'));
 check('洞窟内の移動範囲は従来の半径13.5mを維持', /const CAVE_ROOM_R = 13\.5/.test(html) && /const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v45のバージョン表示とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v45<\/div>/.test(html) && html.includes('shared.js?v=45-fence-camps-dungeon'));
+check('v46のバージョン表示とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v46<\/div>/.test(html) && html.includes('shared.js?v=46-camp-guard-armfix'));
 if (failures) process.exit(1);
 console.log('Surface cave dungeon checks passed.');
