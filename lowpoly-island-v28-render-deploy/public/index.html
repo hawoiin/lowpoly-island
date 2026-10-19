@@ -504,7 +504,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v42</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v43</div>
 </div>
 
 <div id="bossBar"><div id="bossBarName"></div><div id="bossBarBg"><div id="bossBarFill"></div></div></div>
@@ -3934,7 +3934,117 @@ window.startGame = function(NETINIT){
     return g;
   }
 
-  const ENEMY_MAKERS = { wolf:makeWolf, boar:makeBoar, lizard:makeRockLizard, crab:makeCrab, jelly:makeJellyfish, wolfClassic:makeWolfClassic, boarClassic:makeBoarClassic, raider:makeCampRaider };
+  // 新しい野営地の番人。プレイヤーと同じデフォルメ基準(大きめの頭・幅広い胴体・短く太い四肢)で構成する。
+  // 以前の細身で装備の多いモデル makeCampRaider は削除せず、今後別の敵に転用できるよう残す。
+  function makeCampGuard(info){
+    const g = new THREE.Group();
+    const variant = Math.abs(Number.isFinite(info && info.id) ? info.id : 0) % 3;
+    const mat = (color) => new THREE.MeshStandardMaterial({ color, flatShading:true, roughness:1 });
+    const shirt = mat([0x5e6242,0x68513a,0x67453b][variant]);
+    const shirtLight = mat([0x77784e,0x826344,0x80584b][variant]);
+    const trousers = mat([0x453b2d,0x3e4232,0x49372f][variant]);
+    const skin = mat([0xc49370,0xb27f5d,0xc99a78][variant]);
+    const hair = mat([0x342a22,0x3a3028,0x2b2923][variant]);
+    const leather = mat(0x493629), leatherLight = mat(0x74553a), wood = mat(0x76512f), woodDark = mat(0x4d3421), eye = mat(0x1d1915);
+    const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
+    const part = (parent, geo, material, x,y,z, shadow=true) => {
+      const mesh = enemyPart(geo, material, x,y,z,shadow);
+      parent.add(mesh); return mesh;
+    };
+
+    // 腰と胴体。プレイヤーと同じ幅広い箱型の比率にする。
+    part(g, box(0.64,0.16,0.48), trousers, 0,0.49,0,true);
+    const torso = new THREE.Group(); torso.position.set(0,0.5,0); g.add(torso);
+    part(torso, box(0.78,0.55,0.54), shirt, 0,0.30,0,true);
+    part(torso, box(0.74,0.09,0.56), leather, 0,0.16,0.005,true); // 太めのベルト
+    part(torso, box(0.15,0.12,0.045), leatherLight, -0.02,0.16,0.292,false); // ベルト留め
+    part(torso, box(0.40,0.22,0.035), shirtLight, 0,0.36,0.285,false); // 単純な胸当て
+    // 頭はプレイヤーと同じ大きさの箱型。細かな装飾を増やさず、短い髪/頭布だけにする。
+    const head = new THREE.Group(); head.position.set(0,0.78,0); torso.add(head);
+    part(head, box(0.50,0.42,0.46), skin, 0,0,0.01,true);
+    part(head, box(0.53,0.12,0.48), hair, 0,0.19,-0.005,true);
+    part(head, box(0.54,0.055,0.49), hair, 0,0.12,0.0,false); // 平たい髪の縁
+    for (const sx of [-1,1]){
+      part(head, box(0.055,0.045,0.025), eye, sx*0.14,0.035,0.246,false);
+    }
+    part(head, box(0.055,0.06,0.04), skin, 0,-0.035,0.255,false); // 小さな鼻
+    part(head, box(0.10,0.018,0.018), eye, 0,-0.105,0.242,false); // 口
+
+    // 腕はプレイヤーと同じ肩位置・太さ。肘は短い箱型の関節として分け、攻撃時のみ棍棒を振る。
+    const arms = {};
+    for (const sx of [-1,1]){
+      const shoulder = new THREE.Group(); shoulder.position.set(sx*0.47,0.56,0); torso.add(shoulder);
+      part(shoulder, box(0.20,0.30,0.20), shirtLight, 0,-0.15,0,true);
+      const elbow = new THREE.Group(); elbow.position.set(0,-0.28,0); shoulder.add(elbow);
+      part(elbow, box(0.18,0.24,0.18), skin, 0,-0.12,0.005,true);
+      const hand = new THREE.Group(); hand.position.set(0,-0.23,0.035); elbow.add(hand);
+      part(hand, box(0.15,0.13,0.16), skin, 0,0,0.01,true);
+      if (sx > 0){
+        // 棍棒は少ないプリミティブで表現。武器の当たり判定は既存のサーバー処理を利用。
+        part(hand, box(0.055,0.31,0.055), wood, 0,-0.16,0.055,true);
+        const clubHead = part(hand, new THREE.DodecahedronGeometry(0.09,0), woodDark, 0,-0.32,0.055,true);
+        clubHead.scale.set(1.0,1.18,1.0);
+      }
+      arms[sx] = { shoulder, elbow, hand };
+    }
+
+    // 脚はプレイヤーの股関節間隔に近い±0.22。太い箱型の太腿・すね・靴でまとめる。
+    const legs = [];
+    for (const sx of [-1,1]){
+      const hip = new THREE.Group(); hip.position.set(sx*0.22,0.5,0); g.add(hip);
+      part(hip, box(0.26,0.28,0.25), trousers, 0,-0.14,0,true);
+      const knee = new THREE.Group(); knee.position.set(0,-0.27,0); hip.add(knee);
+      part(knee, box(0.22,0.23,0.22), trousers, 0,-0.115,0,true);
+      part(knee, box(0.28,0.08,0.31), woodDark, 0,-0.19,0.045,true); // 短い作業靴
+      part(knee, box(0.285,0.025,0.27), leatherLight, 0,-0.185,0.045,false); // 靴の上端
+      legs.push({ hip, knee, side:sx });
+    }
+
+    g.userData.eyeH = 1.34;
+    g.userData.anim = (t,en,dt) => {
+      dt = Number.isFinite(dt) ? Math.max(0,Math.min(0.08,dt)) : 1/60;
+      const blend = Math.min(1,dt*12);
+      const set = (obj,key,value) => { obj[key] += (value-obj[key])*blend; };
+      const ph = en.ph || 0, wp = Math.max(0,Math.min(1,en.wp || 0));
+      if (en.dying){
+        const fallen = Math.max(0,Math.min(1,(en.dieT || 0)/0.42));
+        set(g.rotation,'z',(en.id % 2 ? 1 : -1) * fallen * 1.12);
+        set(torso.rotation,'x',0.12*fallen);
+        set(arms[-1].shoulder.rotation,'x',-0.42*fallen);
+        set(arms[1].shoulder.rotation,'x',-0.5*fallen);
+        for (const leg of legs) set(leg.hip.rotation,'x',leg.side*0.28*fallen);
+        return;
+      }
+      set(g.rotation,'z',0);
+      const speed = Math.max(0,Math.min(6,en.moveSpeed || 0));
+      const moving = Math.max(0,Math.min(1,speed/2.1));
+      g.userData.gaitPhase = (g.userData.gaitPhase || 0) + dt*(4.0 + speed*2.2);
+      const stride = Math.sin(g.userData.gaitPhase)*moving;
+      const wind = ph === 1 ? wp : 0;
+      const attack = ph === 2 ? 1 : 0;
+      const recovery = ph === 3 ? Math.max(0,1-(en.stT || 0)/0.8) : 0;
+      const flinch = Math.max(0,Math.min(1,(en.hitFlash || 0)/0.25));
+      set(torso.rotation,'x',0.012*Math.sin(t*1.8) + moving*Math.sin(g.userData.gaitPhase*2)*0.018 + wind*0.035 + attack*0.12 - recovery*0.035 + flinch*0.09);
+      set(torso.rotation,'z',Math.sin(t*1.25)*0.012 + flinch*0.12);
+      set(torso.position,'y',0.5 + Math.sin(t*2.1)*0.012 + moving*Math.abs(stride)*0.018 - wind*0.025);
+      for (const leg of legs){
+        set(leg.hip.rotation,'x',stride*0.42*leg.side + attack*0.06);
+        set(leg.knee.rotation,'x',Math.max(0,-stride*leg.side)*0.32 + (ph===3?0.06:0));
+      }
+      set(arms[-1].shoulder.rotation,'x',0.03 + stride*0.25 - wind*0.18 + attack*0.32 + recovery*0.1 + flinch*0.35);
+      set(arms[-1].shoulder.rotation,'z',-0.05);
+      set(arms[-1].elbow.rotation,'x',-0.08 - wind*0.1 - attack*0.12);
+      set(arms[1].shoulder.rotation,'x',0.05 - stride*0.16 + wind*0.78 - attack*1.0 - recovery*0.18 + flinch*0.45);
+      set(arms[1].shoulder.rotation,'z',0.06 + wind*0.08);
+      set(arms[1].elbow.rotation,'x',-0.08 - wind*0.18 - attack*0.16);
+      set(arms[1].hand.rotation,'x',attack*0.12 + recovery*0.05);
+      set(head.rotation,'x',0.015*Math.sin(t*1.8) - wind*0.04 + attack*0.025 + flinch*0.04);
+      set(head.rotation,'y',Math.sin(t*0.65+(en.id||0))*0.035);
+    };
+    return g;
+  }
+
+  const ENEMY_MAKERS = { wolf:makeWolf, boar:makeBoar, lizard:makeRockLizard, crab:makeCrab, jelly:makeJellyfish, wolfClassic:makeWolfClassic, boarClassic:makeBoarClassic, raider:makeCampRaider, campGuard:makeCampGuard };
 
   const enemies = [];
 
@@ -4134,7 +4244,7 @@ window.startGame = function(NETINIT){
       sfx.enemyDefeat();
       spawnHitParticles(new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+0.4, en.mesh.position.z));
     }
-    if (en && ['wolf','boar','wolfClassic','boarClassic','raider'].includes(en.kind) && en.mesh.userData.anim){
+    if (en && ['wolf','boar','wolfClassic','boarClassic','raider','campGuard'].includes(en.kind) && en.mesh.userData.anim){
       // 狼・猪・野営地の人型番人は即時消去せず短い倒れモーションを再生する。サーバー上では既に死亡しているため当たり判定には戻らない。
       en.dying = true; en.dieT = 0;
       en.hpBar.sprite.visible = false;
@@ -7922,7 +8032,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=42-hotfix1"></script>
+<script src="shared.js?v=43-camp-guard"></script>
 <script src="boot.js"></script>
 </body>
 </html>

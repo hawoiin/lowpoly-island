@@ -1,4 +1,4 @@
-// 敵の野営地(見張りの狼・戦利品の箱)の単体テスト。WebSocketライブラリなしで実行できる。
+// 敵の野営地(人型の番人・戦利品の箱)の単体テスト。WebSocketライブラリなしで実行できる。
 'use strict';
 const Shared = require('../public/shared.js');
 const SaveFormat = require('../public/save-format.js');
@@ -35,15 +35,35 @@ for (let i = 1; i <= 40; i++) SEEDS.push((i * 2654435761) >>> 0);
   check('どのseedでも、野営地は洞窟・遺跡・ボス・灯台・泉を避けた陸に決まり、毎回同じ場所になる(' + SEEDS.length + ' seed)', ok, why);
 }
 
+// 泉の配置方式だけを変えても、既存seedの野営地位置を不用意に移動させない。
+{
+  const baseline = [
+    { seed: 1, x: -120.47, y: 4.01, z: -197.51, ry: 1.3437656721597084 },
+    { seed: 7, x: 152.70, y: 5.08, z: 141.47, ry: 3.941833937845661 },
+    { seed: 0x1234abcd, x: -238.70, y: 2.51, z: -20.39, ry: 6.124097779059763 },
+    { seed: 424242, x: 151.35, y: 5.40, z: 138.77, ry: 6.049842479948501 },
+  ];
+  let ok = true, why = '';
+  for (const b of baseline) {
+    const c = Shared.getCampLocation(b.seed);
+    if (!c || Math.abs(c.x - b.x) > 0.001 || Math.abs(c.y - b.y) > 0.001 ||
+        Math.abs(c.z - b.z) > 0.001 || Math.abs(c.ry - b.ry) > 1e-9) {
+      ok = false; why = 'seed ' + b.seed + ' の野営地位置が従来と異なる'; break;
+    }
+  }
+  check('泉の再配置だけでは既存の野営地位置を変えない', ok, why);
+}
+
 // ---- 見張り ----
 const seed = 7;
 const sim = new Shared.WorldSim({ seed });
 const C = sim.campLocation;
 const guards = sim.enemies.filter(e => e.camp);
-check('野営地の見張りは狼3・岩トカゲ1で、敵のidは既存の敵の後ろに付く',
-  guards.length === 4 && guards.filter(e => e.kind === 'wolf').length === 3 && guards.filter(e => e.kind === 'lizard').length === 1 &&
+check('野営地の見張りはプレイヤー風デフォルメの人型番人4体で、敵のidは既存の敵の後ろに付く',
+  guards.length === 4 && guards.every(e => e.kind === 'campGuard' && Shared.ENEMY_KINDS[e.kind] && Shared.ENEMY_KINDS[e.kind].hp === 10) &&
   guards.every(e => Shared.isCampEnemyId(e.id) && e.id >= Shared.ENEMY_CAMP_START) && sim.enemies.filter(e => !e.camp && !e.grotto).length === Shared.ENEMY_CAMP_START);
 check('見張りは野営地のまわりに生きて出現する', guards.every(e => e.alive && Math.hypot(e.x - C.x, e.z - C.z) < 5.5));
+check('野営地以外の既存の敵の並び・数は維持される', Shared.ENEMY_CAMP_START === Shared.ENEMY_WOLF_COUNT + Shared.ENEMY_BOAR_COUNT + Shared.ENEMY_LIZARD_COUNT + Shared.ENEMY_CRAB_COUNT + Shared.ENEMY_JELLY_COUNT + Shared.ENEMY_CLASSIC_WOLF_COUNT + Shared.ENEMY_CLASSIC_BOAR_COUNT && Shared.ENEMY_GROTTO_START === Shared.ENEMY_CAMP_START + 4 && Shared.ENEMY_ORDER.length === Shared.ENEMY_GROTTO_START + 3);
 check('野営地以外の敵は野営地の見張りとして数えられない', !Shared.isCampEnemyId(0) && !Shared.isCampEnemyId(Shared.ENEMY_CAMP_START - 1) && !Shared.isCampEnemyId(Shared.ENEMY_ORDER.length));
 {
   let maxD = 0;
@@ -52,6 +72,21 @@ check('野営地以外の敵は野営地の見張りとして数えられない'
     for (const e of guards) if (e.alive) maxD = Math.max(maxD, Math.hypot(e.x - C.x, e.z - C.z));
   }
   check('誰もいなくても見張りは野営地から離れない(60秒)', maxD < 8, 'max=' + maxD.toFixed(2));
+}
+
+// ---- 人型番人の近接AI ----
+{
+  const hurts = [], bcast = [];
+  const s = new Shared.WorldSim({ seed: 7 });
+  s.out = { sendTo: (id, m) => hurts.push([id, m]), broadcast: m => bcast.push(m) };
+  const r = s.enemies.find(e => e.camp && e.kind === 'campGuard');
+  for (const e of s.enemies) if (e !== r) { e.alive = false; e.respawnAt = Infinity; }
+  s.addClient(8);
+  s.handle(8, { t: 'join', name: 'tester', key: 'camp-guard-test' });
+  s.handle(8, { t: 'state', x: r.x + 1.1, y: Shared.islandHeight(r.x + 1.1, r.z), z: r.z, ry: Math.PI, cave: -1, f: 0 });
+  for (let i=0;i<80;i++) s.tick(0.05);
+  check('人型番人は近づいたプレイヤーへ接近し、棍棒の予備動作・攻撃ステートを使う', r.alive && r.kind === 'campGuard' && bcast.some(m => m.t === 'eatk' && m.id === r.id && m.mv === Shared.MOVE_ID.lunge));
+  check('人型番人の近接攻撃は既存のhurt通信でプレイヤーへダメージを送る', hurts.some(([id,m]) => id === 8 && m.t === 'hurt' && m.amount === Shared.ENEMY_KINDS.campGuard.moves.lunge.hurt));
 }
 
 // ---- 戦利品の箱 ----

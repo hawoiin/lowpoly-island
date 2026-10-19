@@ -93,6 +93,7 @@
   // 技の番号(スナップショットで送る。 状態コード = (段階+1)*10 + 技番号。段階: 0=予備動作 1=本攻撃 2=のけぞり。 0 は技なし)
   const MOVE_ID = { lunge: 1, bite: 2, whip: 3, pulse: 4, charge: 5, pinch: 6 };
   // 初期版の見た目の狼・猪は、強さと動きを狼・猪と同じにして、見た目だけ別の種類にする
+  ENEMY_KINDS.campGuard = ENEMY_KINDS.raider; // 新デザインの番人。戦闘バランスは既存の人型番人と共通。
   ENEMY_KINDS.wolfClassic = ENEMY_KINDS.wolf;
   ENEMY_KINDS.boarClassic = ENEMY_KINDS.boar;
   // 敵のリスト(id順)。この並びが id になる。
@@ -101,7 +102,7 @@
     Array(ENEMY_LIZARD_COUNT).fill('lizard'), Array(ENEMY_CRAB_COUNT).fill('crab'), Array(ENEMY_JELLY_COUNT).fill('jelly'),
     Array(ENEMY_CLASSIC_WOLF_COUNT).fill('wolfClassic'), Array(ENEMY_CLASSIC_BOAR_COUNT).fill('boarClassic'));
   // 野営地の見張り(さらに後ろに追加。既存の敵の id は変えない)。野営地のまわりだけを持ち場にする
-  const ENEMY_CAMP_KINDS = ['raider', 'raider', 'raider', 'raider'];
+  const ENEMY_CAMP_KINDS = ['campGuard', 'campGuard', 'campGuard', 'campGuard'];
   const ENEMY_CAMP_START = ENEMY_ORDER.length;
   for (const k of ENEMY_CAMP_KINDS) ENEMY_ORDER.push(k);
   const ENEMY_GROTTO_START = ENEMY_ORDER.length;
@@ -1089,7 +1090,7 @@
   }
 
   // ---- 体の当たり判定(プレイヤー・敵が重ならないための半径と押し出し) ----
-  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, boss: BOSS_RADIUS };
+  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, campGuard: 0.45, boss: BOSS_RADIUS };
   // 点 (x,z) を、中心 (ox,oz) から minDist 以上離れるように押し出す移動量。離れていれば null
   function bodyPush(x, z, ox, oz, minDist) {
     const dx = x - ox, dz = z - oz;

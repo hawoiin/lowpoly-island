@@ -147,7 +147,7 @@ for (let i = 1; i <= 30; i++) SEEDS.push((i * 2654435761) >>> 0);
   check('ジャンプ中(地面から1.8m)なら、今までどおり襲われる', jump.engaged || jump.hurts > 0, JSON.stringify(jump));
   const c = { x: L.x + 4.2, z: L.z, y: topY };
   check('届く高さの判定は、地面を歩く敵すべてに効き、クラゲは従来の水中の判定のまま',
-    ['wolf', 'boar', 'lizard', 'crab', 'wolfClassic', 'boarClassic'].every(k => Shared.enemyCanReach(k, c) === false) && Shared.enemyCanReach('wolf', { x: L.x + 4.2, z: L.z, y: Shared.islandHeight(L.x + 4.2, L.z) + 1 }) === true);
+    ['wolf', 'boar', 'lizard', 'crab', 'wolfClassic', 'boarClassic', 'raider', 'campGuard'].every(k => Shared.enemyCanReach(k, c) === false) && Shared.enemyCanReach('wolf', { x: L.x + 4.2, z: L.z, y: Shared.islandHeight(L.x + 4.2, L.z) + 1 }) === true);
 }
 
 // ---- 灯台・泉・野営地のまわりは、木・岩・草を置かない円になる ----
