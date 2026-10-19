@@ -504,7 +504,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v47</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v50</div>
 </div>
 
 <div id="bossBar"><div id="bossBarName"></div><div id="bossBarBg"><div id="bossBarFill"></div></div></div>
@@ -720,7 +720,8 @@ window.startGame = function(NETINIT){
 
   const renderer = new THREE.WebGLRenderer({ antialias:true });
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // 高DPI端末での描画負荷を抑制。DPR 1.5以下では従来どおり。
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
@@ -870,7 +871,8 @@ window.startGame = function(NETINIT){
   const sun = new THREE.DirectionalLight(0xfff0d0, 1.15);
   sun.position.set(120, 180, 60);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  // 影マップを1024にし、影描画のピクセル負荷とメモリを削減。
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -90;
   sun.shadow.camera.right = 90;
   sun.shadow.camera.top = 90;
@@ -1619,7 +1621,8 @@ window.startGame = function(NETINIT){
         new THREE.MeshStandardMaterial({ color:leafColor, flatShading:true, roughness:1 })
       );
       leaf.position.y = trunkH + i*1.05;
-      leaf.castShadow = true;
+      // 樹冠は大きい一段だけ影を落とす。
+      leaf.castShadow = (i === 0);
       g.add(leaf);
     }
     g.userData.type = 'wood';
@@ -1650,7 +1653,8 @@ window.startGame = function(NETINIT){
       const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), leafMat);
       const ang = (i/clumpCount)*Math.PI*2;
       leaf.position.set(Math.cos(ang)*0.45, trunkH + 0.55 + Math.random()*0.3, Math.sin(ang)*0.45);
-      leaf.castShadow = true;
+      // 葉の塊のうち1つだけ影を落とし、影パスの描画対象を削減。
+      leaf.castShadow = (i === 0);
       g.add(leaf);
     }
     g.userData.type = 'wood';
@@ -1670,7 +1674,8 @@ window.startGame = function(NETINIT){
       const s = 0.42 + Math.random()*0.22;
       const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), leafMat);
       leaf.position.set((Math.random()-0.5)*0.5, s*0.75, (Math.random()-0.5)*0.5);
-      leaf.castShadow = true;
+      // 小さな低木は個別の影を省く。大きな木・岩の影は維持。
+      leaf.castShadow = false;
       g.add(leaf);
     }
     g.userData.type = 'wood';
@@ -3994,7 +3999,7 @@ window.startGame = function(NETINIT){
     const wp = smooth01(en && en.wp);
     const stT = Math.max(0, Number.isFinite(en && en.stT) ? en.stT : 0);
     const wind = ph === 1 ? wp : 0;
-    // 本攻撃はサーバー上の dur=0.16 秒の前半約0.11秒で振り切る。ダメージ時刻は従来どおり。
+    // サーバー上の攻撃時間・ダメージ時刻はそのまま。表示上の棍棒軌道だけを前方(+Z)へ明確にする。
     const strike = ph === 2 ? smooth01(stT / 0.11) : 0;
     const recover = ph === 3 ? 1 - smooth01(stT / 0.8) : 0;
     const pose = {
@@ -4003,33 +4008,32 @@ window.startGame = function(NETINIT){
       torsoX:0, torsoY:0, bodyDip:0, legBrace:0, kneeBrace:0, headX:0
     };
     if (ph === 1) {
-      // 右腕を胴体の内側へねじらず、肩を外側へ開いて棍棒を頭上に構える。
-      // Z回転を大きな負数にすると、右腕が胸の前を横切って胴体に入り込むため、外向きの正角度を使う。
-      pose.rightShoulderX = 0.22*wind; pose.rightShoulderZ = 2.05*wind;
-      pose.rightElbowX = -0.18*wind; pose.rightElbowZ = 0.18*wind;
-      pose.rightHandX = -0.08*wind; pose.rightHandZ = 0.02*wind;
+      // 予備動作は右腕を少し外へ開き、肘を曲げて棍棒を後方へ引く。大きく横へ振り上げすぎない。
+      pose.rightShoulderX = 0.48*wind; pose.rightShoulderZ = 0.55*wind;
+      pose.rightElbowX = -0.20*wind; pose.rightElbowZ = 0.05*wind;
+      pose.rightHandX = 0.15*wind; pose.rightHandZ = 0.05*wind;
       pose.leftShoulderX = 0.12*wind; pose.leftShoulderZ = 0.20*wind;
       pose.leftElbowX = -0.15*wind; pose.leftElbowZ = 0.12*wind;
-      pose.torsoX = -0.09*wind; pose.torsoY = -0.10*wind; pose.bodyDip = 0.04*wind;
+      pose.torsoX = -0.07*wind; pose.torsoY = -0.04*wind; pose.bodyDip = 0.04*wind;
       pose.legBrace = 0.10*wind; pose.kneeBrace = 0.14*wind; pose.headX = -0.04*wind;
     } else if (ph === 2) {
-      // 肩は外向きを保ったまま、X回転で棍棒を前方へ振り下ろす。腕が胴体を横切らない軌道にする。
-      pose.rightShoulderX = 0.22 - 1.00*strike; pose.rightShoulderZ = 2.05 - 1.75*strike;
-      pose.rightElbowX = -0.18 - 0.16*strike; pose.rightElbowZ = 0.18 - 0.08*strike;
-      pose.rightHandX = -0.08 + 0.36*strike; pose.rightHandZ = 0.02 + 0.18*strike;
+      // 前方(+Z)へ振り下ろす。肩のZ回転を大きく横切らせず、主にX回転で腕を前へ運ぶ。
+      pose.rightShoulderX = 0.48 - 1.48*strike; pose.rightShoulderZ = 0.55 - 0.37*strike;
+      pose.rightElbowX = -0.20; pose.rightElbowZ = 0.05 - 0.07*strike;
+      pose.rightHandX = 0.15 - 0.27*strike; pose.rightHandZ = 0.05 - 0.05*strike;
       pose.leftShoulderX = 0.12 - 0.08*strike; pose.leftShoulderZ = 0.20 - 0.03*strike;
       pose.leftElbowX = -0.15 + 0.05*strike; pose.leftElbowZ = 0.12 + 0.06*strike;
-      pose.torsoX = -0.09 + 0.28*strike; pose.torsoY = -0.10 + 0.24*strike;
+      pose.torsoX = -0.07 + 0.38*strike; pose.torsoY = -0.04 + 0.12*strike;
       pose.bodyDip = 0.04 - 0.035*strike; pose.legBrace = 0.10 - 0.06*strike;
       pose.kneeBrace = 0.14 - 0.10*strike; pose.headX = -0.04 + 0.10*strike;
     } else if (ph === 3) {
-      // 振り切り姿勢は攻撃終端と一致させ、棍棒を下ろしながら通常姿勢へ戻す。
-      pose.rightShoulderX = -0.78*recover; pose.rightShoulderZ = 0.30*recover;
-      pose.rightElbowX = -0.34*recover; pose.rightElbowZ = 0.10*recover;
-      pose.rightHandX = 0.28*recover; pose.rightHandZ = 0.20*recover;
+      // 振り切り姿勢を攻撃終端と一致させ、前方へ伸びた腕を自然に戻す。
+      pose.rightShoulderX = -1.00*recover; pose.rightShoulderZ = 0.18*recover;
+      pose.rightElbowX = -0.20*recover; pose.rightElbowZ = -0.02*recover;
+      pose.rightHandX = -0.12*recover; pose.rightHandZ = 0;
       pose.leftShoulderX = 0.04*recover; pose.leftShoulderZ = 0.17*recover;
       pose.leftElbowX = -0.10*recover; pose.leftElbowZ = 0.18*recover;
-      pose.torsoX = 0.19*recover; pose.torsoY = 0.14*recover; pose.bodyDip = 0.005*recover;
+      pose.torsoX = 0.31*recover; pose.torsoY = 0.08*recover; pose.bodyDip = 0.005*recover;
       pose.legBrace = 0.04*recover; pose.kneeBrace = 0.04*recover; pose.headX = 0.06*recover;
     }
     return pose;
@@ -4289,6 +4293,27 @@ window.startGame = function(NETINIT){
     }
   }
 
+  // 遠距離の敵は見た目の細部アニメだけ更新頻度を下げる。
+  // AI・位置補間・向き・攻撃警告・当たり判定は従来どおり。近距離や戦闘中は毎フレーム更新。
+  function shouldUpdateEnemyDetailAnimation(en, mesh, dt){
+    const dx = mesh.position.x - player.position.x;
+    const dz = mesh.position.z - player.position.z;
+    const distSq = dx*dx + dz*dz;
+    const urgent = en.dying || en.ph || en.atkT > 0 || en.hitFlash > 0 || en.hpBarTimer > 0;
+    if (urgent || distSq < 34*34){
+      en._animAccumulator = 0;
+      en._animDt = dt;
+      return true;
+    }
+    // 34〜70mは20Hz、70m以遠は約12Hz。遠距離ではモデルが小さいため、姿勢更新だけを間引く。
+    const interval = distSq < 70*70 ? 0.05 : 1/12;
+    en._animAccumulator = (en._animAccumulator || 0) + dt;
+    if (en._animAccumulator < interval) return false;
+    en._animDt = Math.min(0.08, en._animAccumulator);
+    en._animAccumulator = 0;
+    return true;
+  }
+
   function updateEnemies(dt){
     const t = performance.now() / 1000;
     for (const en of enemyById.values()){
@@ -4310,7 +4335,9 @@ window.startGame = function(NETINIT){
       en.moveSpeed = (en.moveSpeed || 0) + (Math.min(v, 6) - (en.moveSpeed || 0)) * Math.min(1, dt*8);
       if (en.atkT > 0) en.atkT = Math.max(0, en.atkT - dt);
       updateEnemyMove(en, m, dt, t);
-      if (m.userData.anim) m.userData.anim(t, en, dt);
+      if (m.userData.anim && shouldUpdateEnemyDetailAnimation(en, m, dt)) {
+        m.userData.anim(t, en, Number.isFinite(en._animDt) ? en._animDt : dt);
+      }
       updateEnemyWarn(en, m);
       let diff = en.tr + en.rotOffset - m.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -8006,8 +8033,11 @@ window.startGame = function(NETINIT){
     box.textContent += 'Caught: ' + (err && err.message ? err.message : err) + (err && err.stack ? '\n' + err.stack : '') + '\n';
   }
 
-  // 風による自然物の揺れ(木の葉・低木・薬草がそよ風でわずかに揺れる)
+  // 風による自然物の揺れは視覚演出のみ。30Hzに制限して毎フレームの走査負荷を抑える。
+  let lastWindSwayUpdate = -Infinity;
   function updateWindSway(elapsed){
+    if (elapsed - lastWindSwayUpdate < 1/30) return;
+    lastWindSwayUpdate = elapsed;
     for (const c of collectibles){
       if (!c.alive || !c.mesh.userData.sway) continue;
       const ud = c.mesh.userData;
@@ -8141,7 +8171,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=46-camp-guard-armfix"></script>
+<script src="shared.js?v=50-forward-attack"></script>
 <script src="boot.js"></script>
 </body>
 </html>
