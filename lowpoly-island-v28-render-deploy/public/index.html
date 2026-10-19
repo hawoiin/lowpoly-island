@@ -156,6 +156,10 @@
   #adminLoginButton { flex:1; background:#e8c07d !important; border:0 !important; color:#241a0d !important; }
   #adminAuthStatus, #adminPlayersStatus { display:block; margin-top:8px; font-size:10px; line-height:1.45; opacity:.72; }
   #adminPanel { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.12); }
+  #adminAttackRangeTools { margin:0 0 12px; padding:10px; border-radius:8px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); }
+  #adminAttackRangeTools label { display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; cursor:pointer; }
+  #adminEnemyRangeToggle { width:16px; height:16px; accent-color:#e8c07d; }
+  #adminAttackRangeTools small { display:block; margin:6px 0 0 24px; font-size:10px; line-height:1.45; opacity:.62; }
   #adminListHeader { justify-content:space-between; font-size:12px; margin-bottom:8px; }
   #adminPlayerList { display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; }
   .adminPlayerRow { display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.08); }
@@ -483,6 +487,13 @@
   #netStatus { font-size:12px; opacity:.6; margin:14px 0 0; min-height:16px; }
   #startOverlay button:disabled { opacity:.4; cursor:default; }
   #startOverlay button:disabled:hover { background:#e8c07d; }
+  /* タイトル画面のバージョン表示。ゲーム開始後は startOverlay と一緒に非表示になる。 */
+  #versionLabel {
+    position:absolute; right:18px; bottom:14px;
+    color:#f5f0e6; opacity:.48; font-size:11px; letter-spacing:.08em;
+    text-shadow:0 1px 4px rgba(0,0,0,.5);
+    pointer-events:none; user-select:none;
+  }
 </style>
 </head>
 <body>
@@ -493,6 +504,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v42</div>
 </div>
 
 <div id="bossBar"><div id="bossBarName"></div><div id="bossBarBg"><div id="bossBarFill"></div></div></div>
@@ -620,6 +632,10 @@
       </div>
       <small id="adminAuthStatus" aria-live="polite">未認証。管理者キーを入力してください。</small>
       <div id="adminPanel" hidden>
+        <div id="adminAttackRangeTools">
+          <label for="adminEnemyRangeToggle"><input id="adminEnemyRangeToggle" type="checkbox"> 敵の攻撃範囲表示を有効にする</label>
+          <small>初期状態はOFFです。ONにすると敵やボスの攻撃予告範囲が全プレイヤーの画面に表示されます。</small>
+        </div>
         <div id="adminListHeader"><strong>オンラインプレイヤー</strong><button id="adminRefreshButton" type="button">一覧を更新</button></div>
         <div id="adminPlayersStatus" aria-live="polite">一覧を取得しています…</div>
         <div id="adminPlayerList"></div>
@@ -2706,7 +2722,11 @@ window.startGame = function(NETINIT){
       const a = i / n * Math.PI * 2 + Math.sin(S.x * 0.37 + i) * 0.12, r = 2.75 + Math.sin(S.z * 0.21 + i * 2.3) * 0.12;
       const s = 0.38 + (Math.sin(i * 12.9898 + S.x) * 0.5 + 0.5) * 0.3;
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), stoneMats[i % 3]);
-      rock.scale.y = 0.62; rock.position.set(Math.cos(a) * r, 0.1 + s * 0.2, Math.sin(a) * r);
+      const localX = Math.cos(a) * r, localZ = Math.sin(a) * r;
+      // 岩ごとに設置地点の地面の高さを使う。泉全体の位置・当たり判定は変えず、
+      // 斜面側の石が地面に埋もれたり、低い側で浮いたりするのを抑える。
+      const groundOffset = Shared.springTerrainOffset(S.y, S.x + localX, S.z + localZ);
+      rock.scale.y = 0.62; rock.position.set(localX, groundOffset + 0.1 + s * 0.2, localZ);
       rock.rotation.set(i, i * 1.7, 0); rock.castShadow = true; rock.receiveShadow = true; g.add(rock);
     }
     // 水辺の草(細い円錐を数本ずつ)
@@ -2714,7 +2734,10 @@ window.startGame = function(NETINIT){
       const a = i / 6 * Math.PI * 2 + 0.4, r = 3.15;
       for (let j = 0; j < 3; j++){
         const reed = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.9 + j * 0.25, 4), reedMat);
-        reed.position.set(Math.cos(a) * r + (j - 1) * 0.16, 0.45 + j * 0.12, Math.sin(a) * r + (j % 2) * 0.14);
+        const localX = Math.cos(a) * r + (j - 1) * 0.16;
+        const localZ = Math.sin(a) * r + (j % 2) * 0.14;
+        const groundOffset = Shared.springTerrainOffset(S.y, S.x + localX, S.z + localZ);
+        reed.position.set(localX, groundOffset + 0.45 + j * 0.12, localZ);
         reed.rotation.z = (j - 1) * 0.12; g.add(reed);
       }
     }
@@ -3333,79 +3356,208 @@ window.startGame = function(NETINIT){
     return m;
   }
 
-  function makeWolf(){
+  // 四足動物共通の部位配置補助。見た目の座標を保ったまま、頭・胴・脚・尾を関節グループへ分ける。
+  function addAnimalBodyPart(body, geo, mat, x, y, z, shadow){
+    const m = enemyPart(geo, mat, x, y - body.position.y, z, shadow);
+    body.add(m); return m;
+  }
+  function addAnimalPivotPart(parent, geo, mat, x, y, z, pivotY, pivotZ, shadow){
+    const m = enemyPart(geo, mat, x, y - pivotY, z - pivotZ, shadow);
+    parent.add(m); return m;
+  }
+  function makeWolfRig(classic){
     const g = new THREE.Group();
-    const fur  = new THREE.MeshStandardMaterial({ color:0x6b6660, flatShading:true, roughness:1 });
-    const dark = new THREE.MeshStandardMaterial({ color:0x45413d, flatShading:true, roughness:1 });
-    const pale = new THREE.MeshStandardMaterial({ color:0x9a948a, flatShading:true, roughness:1 });
-    const eyeM = new THREE.MeshStandardMaterial({ color:0xffd35a, emissive:0xb88a1a, emissiveIntensity:0.6, flatShading:true });
+    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading:true, roughness:1 }, extra || {}));
+    const fur = std(0x6b6660), dark = std(classic ? 0x4a4642 : 0x45413d), pale = std(0x9a948a);
+    const eyeM = std(0xffd35a, { emissive:0xb88a1a, emissiveIntensity:0.6 });
     const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
-    // 胴: 厚い胸と細い腰、背中の濃い筋、胸元の淡い毛
-    g.add(enemyPart(box(0.46,0.42,0.5), fur, 0, 0.54, 0.2, true));
-    g.add(enemyPart(box(0.34,0.36,0.4), fur, 0, 0.5, -0.2, true));
-    g.add(enemyPart(box(0.16,0.07,0.95), dark, 0, 0.77, -0.02));
-    g.add(enemyPart(box(0.3,0.2,0.1), pale, 0, 0.44, 0.46));
-    // 首・頭・口先・鼻・耳・目
-    const neck = enemyPart(box(0.26,0.3,0.26), fur, 0, 0.66, 0.46); neck.rotation.x = -0.45; g.add(neck);
-    g.add(enemyPart(box(0.3,0.26,0.3), fur, 0, 0.68, 0.66, true));
-    g.add(enemyPart(box(0.15,0.12,0.26), pale, 0, 0.62, 0.9));
-    g.add(enemyPart(box(0.07,0.06,0.05), dark, 0, 0.65, 1.04));
-    for (const sx of [-1,1]){
-      const ear = enemyPart(new THREE.ConeGeometry(0.075,0.2,4), dark, sx*0.1, 0.89, 0.6);
-      ear.rotation.z = -sx*0.18;
-      g.add(ear);
-      g.add(enemyPart(new THREE.IcosahedronGeometry(0.03,0), eyeM, sx*0.1, 0.72, 0.82));
+    const bodyY = classic ? 0.5 : 0.52;
+    const body = new THREE.Group(); body.position.y = bodyY; g.add(body);
+    const bp = (geo, mat, x,y,z,shadow) => addAnimalBodyPart(body,geo,mat,x,y,z,shadow);
+    if (classic){
+      bp(box(0.52,0.44,0.52),fur,0,0.5,0.22,true);
+      bp(box(0.42,0.38,0.5),fur,0,0.47,-0.24,true);
+      bp(box(0.16,0.06,0.95),dark,0,0.73,-0.02);
+      bp(box(0.34,0.08,0.7),pale,0,0.26,0.0);
+      bp(box(0.32,0.22,0.08),pale,0,0.44,0.5);
+    } else {
+      bp(box(0.46,0.42,0.5),fur,0,0.54,0.2,true);
+      bp(box(0.34,0.36,0.4),fur,0,0.5,-0.2,true);
+      bp(box(0.1,0.035,0.42),dark,0,0.755,0.19);
+      bp(box(0.3,0.2,0.1),pale,0,0.44,0.46);
     }
-    // 尾: 後ろ上がりに細く
-    const tail = enemyPart(new THREE.ConeGeometry(0.085,0.5,5), fur, 0, 0.68, -0.68);
-    tail.rotation.x = -1.22;
-    g.add(tail);
-    // 脚(細い脚+濃い足先)
-    for (const sx of [-0.16,0.16]) for (const sz of [-0.28,0.3]){
-      g.add(enemyPart(new THREE.CylinderGeometry(0.07,0.05,0.36,5), fur, sx, 0.2, sz));
-      g.add(enemyPart(box(0.1,0.05,0.15), dark, sx, 0.025, sz+0.03));
+    const headY = classic ? 0.64 : 0.68, headZ = classic ? 0.7 : 0.66;
+    const head = new THREE.Group(); head.position.set(0,headY-bodyY,headZ); body.add(head);
+    const hp = (geo,mat,x,y,z,shadow) => addAnimalPivotPart(head,geo,mat,x,y,z,headY,headZ,shadow);
+    if (classic){
+      const neck = hp(box(0.28,0.3,0.26),fur,0,0.62,0.5,false); neck.rotation.x=-0.4;
+      hp(box(0.34,0.28,0.34),fur,0,0.64,0.7,true);
+      hp(box(0.17,0.13,0.26),pale,0,0.58,0.94);
+      hp(box(0.15,0.04,0.2),dark,0,0.5,0.93);
+      hp(box(0.09,0.07,0.05),dark,0,0.62,1.08);
+      for (const sx of [-1,1]){
+        const ear=hp(box(0.09,0.17,0.09),dark,sx*0.11,0.86,0.64); ear.rotation.z=-sx*0.15;
+        hp(box(0.05,0.04,0.04),eyeM,sx*0.1,0.7,0.88);
+      }
+    } else {
+      const neck = hp(box(0.26,0.3,0.26),fur,0,0.66,0.46); neck.rotation.x=-0.45;
+      hp(box(0.3,0.26,0.3),fur,0,0.68,0.66,true);
+      hp(box(0.15,0.12,0.26),pale,0,0.62,0.9);
+      hp(box(0.07,0.06,0.05),dark,0,0.65,1.04);
+      for (const sx of [-1,1]){
+        const ear=hp(new THREE.ConeGeometry(0.075,0.2,4),dark,sx*0.1,0.89,0.6); ear.rotation.z=-sx*0.18;
+        hp(new THREE.IcosahedronGeometry(0.03,0),eyeM,sx*0.1,0.72,0.82);
+      }
     }
-    g.userData.eyeH = 0.7;
+    const tailY=classic ? 0.58 : 0.68, tailZ=classic ? -0.48 : -0.68;
+    const tail=new THREE.Group(); tail.position.set(0,tailY-bodyY,tailZ); body.add(tail);
+    if (classic){
+      tail.rotation.x=0.5;
+      tail.add(enemyPart(box(0.11,0.11,0.3),fur,0,0,-0.15));
+      const tail2=new THREE.Group(); tail2.position.set(0,0,-0.3); tail2.rotation.x=0.45; tail.add(tail2);
+      tail2.add(enemyPart(box(0.09,0.09,0.22),dark,0,0,-0.11));
+    } else {
+      const tip=enemyPart(new THREE.ConeGeometry(0.085,0.5,5),fur,0,0,0); tip.rotation.x=-1.22; tail.add(tip);
+    }
+    const legs=[];
+    for (const sx of [-1,1]) for (const sz of [-0.28,0.3]){
+      const front=sz>0, pivot=new THREE.Group(); pivot.position.set(sx*0.16,0.35,sz); g.add(pivot);
+      if (classic){
+        const upper=enemyPart(box(front?0.12:0.15,0.24,0.16),fur,0,-0.05,0,true); pivot.add(upper);
+        pivot.add(enemyPart(box(0.09,0.2,0.1),fur,0,-0.23,front?0.01:-0.02));
+        pivot.add(enemyPart(box(0.12,0.05,0.18),dark,0,-0.325,0.04));
+      } else {
+        pivot.add(enemyPart(new THREE.CylinderGeometry(0.07,0.05,0.36,5),fur,0,-0.15,0,true));
+        pivot.add(enemyPart(box(0.1,0.05,0.15),dark,0,-0.325,0.03));
+      }
+      legs.push({pivot,front,side:sx,phase:(sx*sz<0)?0:Math.PI});
+    }
+    configureQuadrupedAnimation(g,{kind:'wolf',body,bodyY,head,headBaseX:0,headBaseY:headY,tail,tailBaseX:classic?0.5:0,legs,eyeH:classic?0.55:0.7,classic});
     return g;
   }
+  function makeWolf(){ return makeWolfRig(false); }
 
-  function makeBoar(){
+  function makeBoarRig(classic){
     const g = new THREE.Group();
-    const fur   = new THREE.MeshStandardMaterial({ color:0x5a4636, flatShading:true, roughness:1 });
-    const dark  = new THREE.MeshStandardMaterial({ color:0x3a2d22, flatShading:true, roughness:1 });
-    const light = new THREE.MeshStandardMaterial({ color:0x7a5f4e, flatShading:true, roughness:1 });
-    const tuskM = new THREE.MeshStandardMaterial({ color:0xe8e0c8, flatShading:true });
-    const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
-    // 胴: 肩が盛り上がった大きな前半身と、やや低い後半身。背中に硬い毛の列
-    g.add(enemyPart(box(0.68,0.54,0.6), fur, 0, 0.52, 0.12, true));
-    g.add(enemyPart(box(0.58,0.44,0.46), fur, 0, 0.46, -0.34, true));
-    g.add(enemyPart(box(0.36,0.1,0.46), new THREE.MeshStandardMaterial({ color:0x4a3a2c, flatShading:true, roughness:1 }), 0, 0.8, 0.14));
-    for (let i=0;i<5;i++){
-      const z = 0.38 - i*0.2;
-      g.add(enemyPart(new THREE.ConeGeometry(0.05,0.16,4), dark, 0, 0.85 - i*0.05, z));
+    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading:true, roughness:1 }, extra || {}));
+    const fur=std(0x5a4636), dark=std(0x3a2d22), light=std(0x7a5f4e), tuskM=std(0xe8e0c8);
+    const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+    const bodyY=classic?0.54:0.52;
+    const body=new THREE.Group(); body.position.y=bodyY; g.add(body);
+    const bp=(geo,mat,x,y,z,shadow)=>addAnimalBodyPart(body,geo,mat,x,y,z,shadow);
+    if(classic){
+      bp(box(0.66,0.52,0.56),fur,0,0.54,0.16,true);
+      bp(box(0.58,0.44,0.48),fur,0,0.46,-0.34,true);
+      bp(box(0.36,0.08,0.5),dark,0,0.82,0.16);
+      for(let i=0;i<4;i++) bp(box(0.08,0.1,0.1),dark,0,i===0?0.85:0.73,-0.06-i*0.16);
+      bp(box(0.46,0.08,0.7),light,0,0.24,-0.02);
+    } else {
+      bp(box(0.68,0.54,0.6),fur,0,0.52,0.12,true);
+      bp(box(0.58,0.44,0.46),fur,0,0.46,-0.34,true);
+      bp(box(0.36,0.1,0.46),std(0x4a3a2c),0,0.8,0.14);
+      for(let i=0;i<5;i++) bp(new THREE.ConeGeometry(0.05,0.16,4),dark,0,0.85-i*0.05,0.38-i*0.2);
     }
-    // 頭・鼻先(円盤状)・鼻の穴・耳・目・牙
-    g.add(enemyPart(box(0.4,0.36,0.34), fur, 0, 0.46, 0.56, true));
-    const snout = enemyPart(new THREE.CylinderGeometry(0.12,0.14,0.2,6), light, 0, 0.4, 0.8); snout.rotation.x = Math.PI/2; g.add(snout);
-    for (const sx of [-1,1]){
-      g.add(enemyPart(box(0.035,0.04,0.02), dark, sx*0.05, 0.4, 0.905));
-      const ear = enemyPart(new THREE.ConeGeometry(0.085,0.17,4), dark, sx*0.15, 0.7, 0.5);
-      ear.rotation.z = -sx*0.45; g.add(ear);
-      g.add(enemyPart(new THREE.IcosahedronGeometry(0.03,0), dark, sx*0.15, 0.52, 0.72));
-      const tusk = enemyPart(new THREE.ConeGeometry(0.035,0.22,4), tuskM, sx*0.13, 0.43, 0.84);
-      tusk.rotation.x = 1.0; tusk.rotation.z = -sx*0.15; g.add(tusk);
+    const headY=classic?0.46:0.46, headZ=0.56;
+    const head=new THREE.Group(); head.position.set(0,headY-bodyY,headZ); body.add(head);
+    const hp=(geo,mat,x,y,z,shadow)=>addAnimalPivotPart(head,geo,mat,x,y,z,headY,headZ,shadow);
+    hp(box(0.4,0.36,0.34),fur,0,0.46,0.58,true);
+    if(classic){
+      hp(box(0.26,0.2,0.2),light,0,0.38,0.8);
+      for(const sx of [-1,1]){
+        hp(box(0.04,0.04,0.02),dark,sx*0.06,0.38,0.91);
+        const ear=hp(box(0.1,0.15,0.06),dark,sx*0.17,0.7,0.52); ear.rotation.z=-sx*0.4;
+        hp(box(0.05,0.05,0.03),dark,sx*0.14,0.54,0.76);
+        const tusk=hp(new THREE.ConeGeometry(0.04,0.22,4),tuskM,sx*0.13,0.4,0.86); tusk.rotation.x=0.9; tusk.rotation.z=-sx*0.2;
+      }
+    } else {
+      const snout=hp(new THREE.CylinderGeometry(0.12,0.14,0.2,6),light,0,0.4,0.8); snout.rotation.x=Math.PI/2;
+      for(const sx of [-1,1]){
+        hp(box(0.035,0.04,0.02),dark,sx*0.05,0.4,0.905);
+        const ear=hp(new THREE.ConeGeometry(0.085,0.17,4),dark,sx*0.15,0.7,0.5); ear.rotation.z=-sx*0.45;
+        hp(new THREE.IcosahedronGeometry(0.03,0),dark,sx*0.15,0.52,0.72);
+        const tusk=hp(new THREE.ConeGeometry(0.035,0.22,4),tuskM,sx*0.13,0.43,0.84); tusk.rotation.x=1.0; tusk.rotation.z=-sx*0.15;
+      }
     }
-    // 短い尻尾
-    const tail = enemyPart(new THREE.ConeGeometry(0.03,0.22,4), dark, 0, 0.62, -0.62); tail.rotation.x = -0.9; g.add(tail);
-    // 脚(太く短い)+ひづめ
-    for (const sx of [-0.22,0.22]) for (const sz of [-0.34,0.3]){
-      g.add(enemyPart(new THREE.CylinderGeometry(0.085,0.065,0.34,5), fur, sx, 0.19, sz));
-      g.add(enemyPart(box(0.12,0.05,0.14), dark, sx, 0.025, sz+0.02));
+    const tailY=classic?0.62:0.62, tailZ=classic?-0.57:-0.62;
+    const tail=new THREE.Group(); tail.position.set(0,tailY-bodyY,tailZ); tail.rotation.x=classic?0.8:-0.9; body.add(tail);
+    if(classic) tail.add(enemyPart(box(0.05,0.05,0.2),dark,0,0,-0.1));
+    else tail.add(enemyPart(new THREE.ConeGeometry(0.03,0.22,4),dark,0,0,0));
+    const legs=[];
+    for(const sx of [-0.22,0.22]) for(const sz of [-0.34,classic?0.32:0.3]){
+      const front=sz>0, pivot=new THREE.Group(); pivot.position.set(sx,0.32,sz); g.add(pivot);
+      if(classic){
+        pivot.add(enemyPart(box(0.15,0.24,0.16),fur,0,-0.06,0,true));
+        pivot.add(enemyPart(box(0.12,0.12,0.13),fur,0,-0.23,0));
+        pivot.add(enemyPart(box(0.15,0.05,0.17),dark,0,-0.295,0.02));
+      } else {
+        pivot.add(enemyPart(new THREE.CylinderGeometry(0.085,0.065,0.34,5),fur,0,-0.13,0,true));
+        pivot.add(enemyPart(box(0.12,0.05,0.14),dark,0,-0.295,0.02));
+      }
+      legs.push({pivot,front,side:sx,phase:(sx*sz<0)?0:Math.PI});
     }
-    g.userData.eyeH = 0.6;
+    configureQuadrupedAnimation(g,{kind:'boar',body,bodyY,head,headBaseX:0,headBaseY:headY,tail,tailBaseX:classic?0.8:-0.9,legs,eyeH:0.6,classic});
     return g;
   }
+  function makeBoar(){ return makeBoarRig(false); }
 
+  // 狼・猪のモーション: 待機の呼吸/視線、歩行・走行の対角歩き、突進予備動作/突進/回復、被弾、死亡を分けて制御する。
+  function configureQuadrupedAnimation(g, rig){
+    rig.gaitPhase = 0;
+    g.userData.eyeH = rig.eyeH;
+    g.userData.anim = (t,en,dt) => {
+      dt = Number.isFinite(dt) ? Math.max(0,Math.min(0.08,dt)) : 1/60;
+      const id = Number.isFinite(en.id) ? en.id : 0;
+      const ph = en.ph || 0, wp = Math.max(0,Math.min(1,en.wp || 0));
+      const speed = Math.max(0,Math.min(6,en.moveSpeed || 0));
+      const moving = Math.max(0,Math.min(1,(speed-0.12)/0.62));
+      const run = Math.max(0,Math.min(1,(speed-(rig.kind==='wolf'?1.7:2.0))/1.5));
+      rig.gaitPhase += dt * (3.1 + speed * (rig.kind==='wolf'?2.4:2.0));
+      const strideAmp = rig.kind==='wolf' ? 0.26 + 0.18*run : 0.2 + 0.13*run;
+      const prep = ph===1 ? wp : 0;
+      const strike = ph===2 ? 1 : 0;
+      const recover = ph===3 ? Math.max(0,1-(en.stT||0)/(rig.kind==='wolf'?0.7:1.2)) : 0;
+      if (en.dying){
+        const d=Math.max(0,Math.min(1,(en.dieT||0)/0.58));
+        rig.body.position.y=rig.bodyY-0.14*d;
+        rig.body.rotation.x=0.08+0.2*d;
+        rig.body.rotation.z=(id%2?1:-1)*(0.1+0.72*d);
+        rig.head.rotation.x=0.08+0.7*d;
+        rig.head.rotation.y=(id%2?1:-1)*0.12*d;
+        rig.tail.rotation.x=rig.tailBaseX+0.45*d;
+        rig.legs.forEach((leg,i)=>{ leg.pivot.rotation.x=(leg.front?0.7:-0.55)*d + Math.sin(i+id)*0.05*(1-d); leg.pivot.rotation.z=leg.side*0.12*d; });
+        return;
+      }
+      const gait = Math.sin(rig.gaitPhase);
+      const impact = Math.max(0,Math.min(1,(en.hitFlash||0)/0.25));
+      for(const leg of rig.legs){
+        const swing=Math.sin(rig.gaitPhase+leg.phase)*strideAmp*moving;
+        let pose=0;
+        if(ph===1) pose += prep*(leg.front?0.16:-0.1);
+        if(ph===2) pose += leg.front?-0.18:0.15;
+        if(ph===3) pose += (leg.front?-0.1:0.08)*recover;
+        leg.pivot.rotation.x=swing+pose;
+        leg.pivot.rotation.z=leg.side*(0.025*moving*Math.cos(rig.gaitPhase+leg.phase)+0.1*impact);
+      }
+      const breath=Math.sin(t*2.3+id*0.7)*0.008;
+      const bob=Math.abs(gait)*0.018*moving;
+      rig.body.position.y=rig.bodyY+breath+bob-0.035*prep-0.015*strike;
+      rig.body.rotation.x=0.018*Math.sin(rig.gaitPhase*2)*moving+0.13*prep-0.07*strike+0.025*recover;
+      rig.body.rotation.z=0.035*Math.sin(rig.gaitPhase)*moving+(id%2?1:-1)*0.13*impact;
+      rig.head.rotation.x=0.035*Math.sin(t*2.1+id)* (1-moving) + 0.06*Math.sin(rig.gaitPhase*2)*moving;
+      if(rig.kind==='boar') rig.head.rotation.x += 0.26*prep + 0.17*strike - 0.1*recover;
+      else rig.head.rotation.x += 0.16*prep + 0.08*strike - 0.12*recover;
+      rig.head.rotation.x -= 0.22*impact;
+      rig.head.rotation.y=Math.sin(t*(moving?2.6:0.75)+id*1.9)* (0.035+0.025*(1-moving));
+      rig.head.rotation.z=(id%2?1:-1)*0.07*impact;
+      if(rig.kind==='wolf'){
+        rig.tail.rotation.x=rig.tailBaseX+Math.sin(t*4.2+id)*0.12+0.05*run+0.18*prep;
+        rig.tail.rotation.z=Math.sin(t*3.1+id)*0.13;
+      } else {
+        rig.tail.rotation.x=rig.tailBaseX+Math.sin(t*5.4+id)*0.24+0.35*prep-0.12*strike;
+        rig.tail.rotation.z=Math.sin(t*4.1+id)*0.18;
+      }
+    };
+  }
   // ---- 岩トカゲ: 苔むした岩肌の四足トカゲ(前方が +z)。近づくまで岩のように伏せて目を閉じている ----
   function makeRockLizard(){
     const g = new THREE.Group();
@@ -3646,79 +3798,143 @@ window.startGame = function(NETINIT){
     return m;
   }
 
-  function makeWolfClassic(){
+  // 旧デザインの狼・猪も、見た目の系統を保ちつつ同じ関節モーションを使う。
+  function makeWolfClassic(){ return makeWolfRig(true); }
+  function makeBoarClassic(){ return makeBoarRig(true); }
+
+  // ---- 野営地の人型番人(漂着者の略奪者) ----
+  // 既存の敵描画・HP・当たり判定・AIステートを再利用し、モデルと局所モーションだけを追加。
+  // 前方は既存の敵と同じ +Z、足元を原点にする。外部アセットや追加ライブラリは不要。
+  function makeCampRaider(info){
     const g = new THREE.Group();
-    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading:true, roughness:1 }, extra || {}));
-    const fur = std(0x6b6660), dark = std(0x4a4642), pale = std(0x9a948a);
-    const eyeM = std(0xffd35a, { emissive:0xb88a1a, emissiveIntensity:0.6 });
-    // 胴: 胸が太く腰が細い2つの箱、背中の濃い筋、お腹と胸元の淡い毛
-    g.add(classicBox(0.52, 0.44, 0.52, fur, 0, 0.5, 0.22, true));
-    g.add(classicBox(0.42, 0.38, 0.5, fur, 0, 0.47, -0.24, true));
-    g.add(classicBox(0.16, 0.06, 0.95, dark, 0, 0.73, -0.02));
-    g.add(classicBox(0.34, 0.08, 0.7, pale, 0, 0.26, 0.0));
-    g.add(classicBox(0.32, 0.22, 0.08, pale, 0, 0.44, 0.5));
-    // 首・頭・口先・鼻・下あご・耳・目
-    g.add(classicBox(0.28, 0.3, 0.26, fur, 0, 0.62, 0.5, false, -0.4));
-    g.add(classicBox(0.34, 0.28, 0.34, fur, 0, 0.64, 0.7, true));
-    g.add(classicBox(0.17, 0.13, 0.26, pale, 0, 0.58, 0.94));
-    g.add(classicBox(0.15, 0.04, 0.2, dark, 0, 0.5, 0.93));
-    g.add(classicBox(0.09, 0.07, 0.05, dark, 0, 0.62, 1.08));
-    for (const sx of [-1, 1]){
-      g.add(classicBox(0.09, 0.17, 0.09, dark, sx*0.11, 0.86, 0.64, false, 0, -sx*0.15));
-      g.add(classicBox(0.05, 0.04, 0.04, eyeM, sx*0.1, 0.7, 0.88));
+    const variant = Math.abs(Number.isFinite(info && info.id) ? info.id : 0) % 3;
+    const mat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading:true, roughness:1 }, extra || {}));
+    const shirt = mat([0x65533b,0x515a42,0x665047][variant]);
+    const shirtDark = mat([0x463a2a,0x394334,0x49372f][variant]);
+    const leather = mat(0x493328), leatherLight = mat(0x74543a);
+    const skin = mat([0xb98565,0x9f7358,0xc18e6a][variant]);
+    const hood = mat([0x342e27,0x38382f,0x3c302b][variant]);
+    const wood = mat(0x69472d), woodDark = mat(0x3f2b1d);
+    const eye = mat(0x191713), metal = mat(0x77715f);
+    const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
+    const part = (parent, geo, material, x,y,z, shadow) => {
+      const mesh = enemyPart(geo, material, x,y,z,shadow);
+      parent.add(mesh); return mesh;
+    };
+
+    // 腰と胴体。胴体を独立したグループにし、攻撃・被弾時に少し傾けられる。
+    part(g, box(0.42,0.25,0.29), shirtDark, 0,0.87,0,true);
+    const torso = new THREE.Group(); torso.position.set(0,1.16,0); g.add(torso);
+    part(torso, box(0.49,0.56,0.33), shirt, 0,0.02,0,true);
+    part(torso, box(0.42,0.12,0.35), leather, 0,-0.24,0.005);
+    part(torso, box(0.48,0.055,0.36), leatherLight, 0,-0.18,0.015);
+    // 胸を斜めに横切る革ひもと、道具袋。
+    const strap = part(torso, box(0.065,0.46,0.035), leatherLight, -0.025,0.035,0.178);
+    strap.rotation.z = -0.22;
+    part(torso, box(0.15,0.16,0.105), leather, -0.205,-0.18,0.19,true);
+    part(torso, box(0.09,0.045,0.025), metal, -0.205,-0.18,0.25);
+    // 左肩だけに継ぎ足した革当て。シルエットを少し変えて4人が全く同じに見えるのを防ぐ。
+    const shoulderPad = part(torso, new THREE.IcosahedronGeometry(0.13,0), leatherLight, -0.25,0.22,0,true);
+    shoulderPad.scale.set(1.1,0.75,1.05);
+    // 布の短い後ろ裾は胴体の輪郭内に収め、背中から板状部品が突き出ない形にする。
+    const flap = part(torso, box(0.30,0.22,0.045), shirtDark, 0,-0.30,-0.17);
+    flap.rotation.x = -0.08;
+
+    // 首・頭・フード。顔の正面は +Z。
+    part(torso, new THREE.CylinderGeometry(0.085,0.095,0.14,6), skin, 0,0.31,0.015);
+    const head = new THREE.Group(); head.position.set(0,0.405,0.015); torso.add(head);
+    const face = part(head, new THREE.IcosahedronGeometry(0.18,0), skin, 0,0.035,0.025,true);
+    face.scale.set(0.91,1.07,0.88);
+    const hoodCap = new THREE.Mesh(new THREE.SphereGeometry(0.20,7,4,0,Math.PI*2,0,Math.PI/2), hood);
+    hoodCap.position.set(0,0.12,-0.012); hoodCap.castShadow = true; head.add(hoodCap);
+    part(head, box(0.25,0.075,0.13), hood, 0,-0.045,0.105); // 額のフード縁
+    for (const sx of [-1,1]){
+      part(head, box(0.045,0.07,0.06), skin, sx*0.168,0.025,0.005);
+      part(head, new THREE.SphereGeometry(0.018,5,4), eye, sx*0.061,0.045,0.174);
     }
-    // 尾: 2つの節で後ろ上がりに、先は濃い色
-    // (腰の後ろの面から始まり、1つ目の節の先に2つ目の節をつなげる。回転は付け根の回転軸で行う)
-    const tail1 = new THREE.Group(); tail1.position.set(0, 0.58, -0.48); tail1.rotation.x = 0.5; g.add(tail1);
-    tail1.add(classicBox(0.11, 0.11, 0.3, fur, 0, 0, -0.15));
-    const tail2 = new THREE.Group(); tail2.position.set(0, 0, -0.3); tail2.rotation.x = 0.45; tail1.add(tail2);
-    tail2.add(classicBox(0.09, 0.09, 0.22, dark, 0, 0, -0.11));
-    // 脚: 太もも・すね・足先の3段(前脚は少し前、後ろ脚は太もも広め)
-    for (const sx of [-0.16, 0.16]) for (const sz of [-0.3, 0.3]){
-      const back = sz < 0;
-      g.add(classicBox(back ? 0.15 : 0.12, 0.24, 0.16, fur, sx, 0.3, sz, true));
-      g.add(classicBox(0.09, 0.2, 0.1, fur, sx, 0.12, sz + (back ? -0.02 : 0.01)));
-      g.add(classicBox(0.12, 0.05, 0.18, dark, sx, 0.025, sz + 0.04));
+    part(head, box(0.048,0.05,0.045), skin, 0,-0.015,0.18);
+    part(head, box(0.075,0.018,0.014), eye, 0,-0.075,0.16);
+    part(torso, box(0.30,0.10,0.31), shirtDark, 0,0.285,0.01); // 首元の布
+
+    // 腕は肩・肘をグループ化。右手には木の棍棒を持たせ、攻撃時だけ大きく振る。
+    const arms = {};
+    for (const sx of [-1,1]){
+      const shoulder = new THREE.Group(); shoulder.position.set(sx*0.285,0.205,0); torso.add(shoulder);
+      const pad = part(shoulder, new THREE.IcosahedronGeometry(0.105,0), sx < 0 ? leatherLight : shirtDark, 0,0,0,true);
+      pad.scale.set(1.05,0.9,1.0);
+      part(shoulder, box(0.15,0.34,0.16), shirt, 0,-0.16,0,true);
+      const elbow = new THREE.Group(); elbow.position.set(0,-0.31,0); shoulder.add(elbow);
+      part(elbow, box(0.125,0.29,0.14), leatherLight, 0,-0.14,0,true);
+      const hand = new THREE.Group(); hand.position.set(0,-0.285,0.035); elbow.add(hand);
+      part(hand, new THREE.IcosahedronGeometry(0.065,0), skin, 0,0,0.015);
+      if (sx > 0){
+        part(hand, box(0.055,0.32,0.055), wood, 0,0.12,0.055,true);
+        const clubHead = part(hand, new THREE.DodecahedronGeometry(0.105,0), woodDark, 0,0.30,0.055,true);
+        clubHead.scale.set(0.9,1.25,0.9);
+        part(hand, box(0.068,0.045,0.068), leather, 0,0.045,0.055);
+      }
+      arms[sx] = { shoulder, elbow, hand };
     }
-    g.userData.eyeH = 0.55;
+
+    // 短い作業靴とズボン。脚の付け根は胴体の真下に置き、歩行で極端に広がらないようにする。
+    const legs = [];
+    for (const sx of [-1,1]){
+      const hip = new THREE.Group(); hip.position.set(sx*0.145,0.78,0); g.add(hip);
+      part(hip, box(0.18,0.39,0.19), shirtDark, 0,-0.19,0,true);
+      const knee = new THREE.Group(); knee.position.set(0,-0.375,0); hip.add(knee);
+      part(knee, box(0.145,0.34,0.16), leather, 0,-0.17,0,true);
+      part(knee, box(0.17,0.105,0.25), woodDark, 0,-0.315,0.045,true);
+      part(knee, box(0.175,0.035,0.24), leatherLight, 0,-0.265,0.045);
+      legs.push({ hip, knee, side:sx });
+    }
+
+    g.userData.eyeH = 1.84;
+    g.userData.anim = (t,en,dt) => {
+      dt = Number.isFinite(dt) ? Math.max(0,Math.min(0.08,dt)) : 1/60;
+      const blend = Math.min(1,dt*12);
+      const set = (obj,key,value) => { obj[key] += (value-obj[key])*blend; };
+      const ph = en.ph || 0, wp = Math.max(0,Math.min(1,en.wp || 0));
+      if (en.dying){
+        const fallen = Math.max(0,Math.min(1,(en.dieT || 0)/0.42));
+        g.rotation.z = (en.id % 2 ? 1 : -1) * fallen * 1.15;
+        set(torso.rotation,'x',0.16*fallen);
+        set(arms[-1].shoulder.rotation,'x',-0.7*fallen);
+        set(arms[1].shoulder.rotation,'x',-0.55*fallen);
+        for (const leg of legs) set(leg.hip.rotation,'x',leg.side*0.35*fallen);
+        return;
+      }
+      set(g.rotation,'z',0);
+      const speed = Math.max(0,Math.min(6,en.moveSpeed || 0));
+      const moving = Math.max(0,Math.min(1,speed/2.1));
+      g.userData.gaitPhase = (g.userData.gaitPhase || 0) + dt*(4.0 + speed*2.2);
+      const stride = Math.sin(g.userData.gaitPhase)*moving;
+      const wind = ph === 1 ? wp : 0;
+      const attack = ph === 2 ? 1 : 0;
+      const recovery = ph === 3 ? Math.max(0,1-(en.stT || 0)/0.8) : 0;
+      const flinch = Math.max(0,Math.min(1,(en.hitFlash || 0)/0.25));
+      // 胴体は待機時にわずかに呼吸し、攻撃前後だけ重心を前後へ移す。
+      set(torso.rotation,'x',0.012*Math.sin(t*1.8) + moving*Math.sin(g.userData.gaitPhase*2)*0.018 + wind*0.035 + attack*0.12 - recovery*0.035 + flinch*0.09);
+      set(torso.rotation,'z',Math.sin(t*1.25)*0.012 + flinch*0.12);
+      set(torso.position,'y',1.16 + Math.sin(t*2.1)*0.012 + moving*Math.abs(stride)*0.018 - wind*0.035);
+      set(head.rotation,'x',0.025 + moving*Math.sin(g.userData.gaitPhase+1)*0.035 - wind*0.07 + attack*0.04);
+      set(head.rotation,'y',Math.sin(t*0.8 + (en.id||0))*0.05);
+      for (const leg of legs){
+        const s = leg.side;
+        set(leg.hip.rotation,'x',stride*0.52*s + attack*0.08);
+        set(leg.knee.rotation,'x',Math.max(0, -stride*s)*0.48 + (ph===3?0.08:0));
+      }
+      set(arms[-1].shoulder.rotation,'x',0.06 - stride*0.30 - wind*0.28 - attack*0.48 + recovery*0.12 + flinch*0.45);
+      set(arms[-1].shoulder.rotation,'z',-0.08);
+      set(arms[-1].elbow.rotation,'x',-0.12 - wind*0.12 - attack*0.18);
+      set(arms[1].shoulder.rotation,'x',0.08 + stride*0.12 + wind*0.88 - attack*1.22 - recovery*0.20 + flinch*0.55);
+      set(arms[1].shoulder.rotation,'z',0.10 + wind*0.12);
+      set(arms[1].elbow.rotation,'x',-0.12 - wind*0.24 - attack*0.2);
+      set(arms[1].hand.rotation,'x',attack*0.18 + recovery*0.06);
+    };
     return g;
   }
 
-  function makeBoarClassic(){
-    const g = new THREE.Group();
-    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading:true, roughness:1 }, extra || {}));
-    const fur = std(0x5a4636), dark = std(0x3a2d22), light = std(0x7a5f4e);
-    const tuskM = std(0xe8e0c8);
-    // 胴: 肩が盛り上がった前半身と低い後半身、背中に硬い毛の列、お腹の淡い面
-    g.add(classicBox(0.66, 0.52, 0.56, fur, 0, 0.54, 0.16, true));
-    g.add(classicBox(0.58, 0.44, 0.48, fur, 0, 0.46, -0.34, true));
-    g.add(classicBox(0.36, 0.08, 0.5, dark, 0, 0.82, 0.16));
-    for (let i = 0; i < 4; i++) g.add(classicBox(0.08, 0.1, 0.1, dark, 0, i === 0 ? 0.85 : 0.73, -0.06 - i*0.16)); // 1本目は前半身(上面0.80)、残りは後半身(上面0.68)の上に載せる
-    g.add(classicBox(0.46, 0.08, 0.7, light, 0, 0.24, -0.02));
-    // 頭・鼻先・鼻の穴・耳・目・牙
-    g.add(classicBox(0.4, 0.36, 0.34, fur, 0, 0.46, 0.58, true));
-    g.add(classicBox(0.26, 0.2, 0.2, light, 0, 0.38, 0.8));
-    for (const sx of [-1, 1]){
-      g.add(classicBox(0.04, 0.04, 0.02, dark, sx*0.06, 0.38, 0.91));
-      g.add(classicBox(0.1, 0.15, 0.06, dark, sx*0.17, 0.7, 0.52, false, 0, -sx*0.4));
-      g.add(classicBox(0.05, 0.05, 0.03, dark, sx*0.14, 0.54, 0.76));
-      const tusk = enemyPart(new THREE.ConeGeometry(0.04, 0.22, 4), tuskM, sx*0.13, 0.4, 0.86);
-      tusk.rotation.x = 0.9; tusk.rotation.z = -sx*0.2; g.add(tusk);
-    }
-    // 短い尻尾
-    const tail = new THREE.Group(); tail.position.set(0, 0.62, -0.57); tail.rotation.x = 0.8; g.add(tail); // 腰の後ろの面から斜め上へ
-    tail.add(classicBox(0.05, 0.05, 0.2, dark, 0, 0, -0.1));
-    // 脚: 太く短い2段と、濃い色のひづめ
-    for (const sx of [-0.22, 0.22]) for (const sz of [-0.34, 0.32]){
-      g.add(classicBox(0.15, 0.24, 0.16, fur, sx, 0.26, sz, true));
-      g.add(classicBox(0.12, 0.12, 0.13, fur, sx, 0.09, sz));
-      g.add(classicBox(0.15, 0.05, 0.17, dark, sx, 0.025, sz + 0.02));
-    }
-    g.userData.eyeH = 0.6;
-    return g;
-  }
-
-  const ENEMY_MAKERS = { wolf:makeWolf, boar:makeBoar, lizard:makeRockLizard, crab:makeCrab, jelly:makeJellyfish, wolfClassic:makeWolfClassic, boarClassic:makeBoarClassic };
+  const ENEMY_MAKERS = { wolf:makeWolf, boar:makeBoar, lizard:makeRockLizard, crab:makeCrab, jelly:makeJellyfish, wolfClassic:makeWolfClassic, boarClassic:makeBoarClassic, raider:makeCampRaider };
 
   const enemies = [];
 
@@ -3752,7 +3968,7 @@ window.startGame = function(NETINIT){
 
   function addEnemy(info){
     removeEnemy(info.id);
-    const mesh = (ENEMY_MAKERS[info.kind] || makeBoar)();
+    const mesh = (ENEMY_MAKERS[info.kind] || makeBoar)(info);
     const rotOffset = mesh.userData.rotOffset || 0;
     mesh.position.set(info.x, enemyBaseY(mesh, info.x, info.z), info.z);
     mesh.rotation.order = 'YXZ'; // 向き(Y)のあとで前後に傾ける(しゃがみ・突進の姿勢用)
@@ -3808,8 +4024,24 @@ window.startGame = function(NETINIT){
       m.rotation.x = en.pitch; m.rotation.z = shake; m.position.y += en.dip;
     }
   }
+  // 管理者が切り替える敵の攻撃範囲表示。OFFでも攻撃判定や戦闘処理には影響しない。
+  function setEnemyAttackRangeDisplayEnabled(enabled){
+    enemyAttackRangeDisplayEnabled = enabled === true;
+    if (adminEnemyRangeToggle) adminEnemyRangeToggle.checked = enemyAttackRangeDisplayEnabled;
+    if (!enemyAttackRangeDisplayEnabled){
+      for (const en of enemyById.values()) if (en.warn) en.warn.visible = false;
+    }
+    if (boss && boss.marks){
+      for (const mark of boss.marks){
+        if (mark.fill) mark.fill.visible = enemyAttackRangeDisplayEnabled;
+        if (mark.edge) mark.edge.visible = enemyAttackRangeDisplayEnabled;
+      }
+    }
+  }
+
   // 技の予備動作の間、当たる範囲を地面に赤く表示する(円=周囲への攻撃、帯=突進・飛びかかりの通り道)
   function updateEnemyWarn(en, m){
+    if (!enemyAttackRangeDisplayEnabled){ if (en.warn) en.warn.visible = false; return; }
     const def = en.ph && en.ph < 3 ? (Shared.ENEMY_KINDS[en.kind].moves || {})[MOVE_NAMES[en.mvId]] : null;
     if (!def){ if (en.warn) en.warn.visible = false; return; }
     if (!en.warn){
@@ -3842,6 +4074,13 @@ window.startGame = function(NETINIT){
     const t = performance.now() / 1000;
     for (const en of enemyById.values()){
       const m = en.mesh;
+      if (en.dying){
+        en.dieT = (en.dieT || 0) + dt;
+        if (m.userData.anim) m.userData.anim(t, en, dt);
+        m.scale.setScalar(Math.max(0.001, 1 - en.dieT * 1.65));
+        if (en.dieT >= 0.6) removeEnemy(en.id);
+        continue;
+      }
       const k = Math.min(1, dt*10);
       const px = m.position.x, pz = m.position.z;
       m.position.x += (en.tx - m.position.x) * k;
@@ -3895,7 +4134,14 @@ window.startGame = function(NETINIT){
       sfx.enemyDefeat();
       spawnHitParticles(new THREE.Vector3(en.mesh.position.x, en.mesh.position.y+0.4, en.mesh.position.z));
     }
-    removeEnemy(m.id);
+    if (en && ['wolf','boar','wolfClassic','boarClassic','raider'].includes(en.kind) && en.mesh.userData.anim){
+      // 狼・猪・野営地の人型番人は即時消去せず短い倒れモーションを再生する。サーバー上では既に死亡しているため当たり判定には戻らない。
+      en.dying = true; en.dieT = 0;
+      en.hpBar.sprite.visible = false;
+      if (en.warn) en.warn.visible = false;
+    } else {
+      removeEnemy(m.id);
+    }
     if (m.by === NET_ID){ // 倒した本人にだけドロップ(岩トカゲは石材×2、ほかは薬草×1)
       const drop = en && en.kind === 'lizard' ? { key:'stone', n:2, label:'石材' } : { key:'herb', n:1, label:'薬草' };
       inv[drop.key] += drop.n;
@@ -4077,6 +4323,7 @@ window.startGame = function(NETINIT){
       new THREE.MeshBasicMaterial({ color:0xff3b2a, transparent:true, opacity:0.2, side:THREE.DoubleSide, depthWrite:false }));
     const edge = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 48),
       new THREE.MeshBasicMaterial({ color:0xff7a5a, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthWrite:false }));
+    fill.visible = edge.visible = enemyAttackRangeDisplayEnabled;
     for (const m of [fill, edge]){ m.rotation.x = -Math.PI/2; m.scale.setScalar(r); g.add(m); }
     const y = groundTop(x, z, r) + 0.15;
     g.position.set(x, y, z);
@@ -5058,6 +5305,8 @@ window.startGame = function(NETINIT){
   }
 
   let placing = null; // { def, ghost, rot, issue }(rot=向きの補正角、issue=置けない理由コード)
+  // 柵を連続設置するときの開いた経路。最初の柵と2枚目の接続方向から、囲いの始点と現在の終点を記憶する。
+  let fenceChain = null; // { firstSid, lastSid, startEndpoint, lastEndpoint }
   // サーバーの設置応答を待つ間は二重送信を防ぐ。設置成功後も placing は維持する。
   let pendingPlacement = null; // { buildId, source, cost, x, y, z, ry, owner }
 
@@ -5071,6 +5320,13 @@ window.startGame = function(NETINIT){
   const placeHintEl = document.getElementById('placeHint');
   const placeConfirmBtn = document.getElementById('placeConfirm');
   const placeRotateBtn = document.getElementById('placeRotate');
+  // 囲いの閉じ先を示す目印。プラットフォーム依存の記号は使わず、ゲーム内の立体で表示する。
+  const fenceCloseMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 10, 8),
+    new THREE.MeshBasicMaterial({ color:0x62f7aa, transparent:true, opacity:0.9, depthWrite:false })
+  );
+  fenceCloseMarker.visible = false;
+  scene.add(fenceCloseMarker);
 
   function rotatePlacing(dir){
     if (!placing || pendingPlacement) return;
@@ -5083,21 +5339,32 @@ window.startGame = function(NETINIT){
     placing.issue = issue;
     placing.ghost.traverse(o=>{
       if (o.isMesh && o.material.emissive){
-        o.material.emissive.setHex(issue ? 0xb01818 : (o.material.userData.baseEmissive || 0));
+        o.material.emissive.setHex(issue ? 0xb01818 : (placing.closingLoop ? 0x087b43 : (o.material.userData.baseEmissive || 0)));
+        if (placing.closingLoop && !issue) o.material.emissiveIntensity = 0.85;
+        else if (Number.isFinite(o.material.userData.baseEmissiveIntensity)) o.material.emissiveIntensity = o.material.userData.baseEmissiveIntensity;
       }
     });
     const waiting = !!pendingPlacement;
     placeConfirmBtn.disabled = !!issue || waiting;
     placeRotateBtn.disabled = waiting;
     placeHintEl.classList.toggle('bad', !!issue && !waiting);
-    placeHintEl.textContent = waiting ? '設置を確認中…' : (issue ? PLACE_ISSUE_TEXT[issue] :
-      (placing.snapped
-        ? (placing.def.id === 'floor'
-            ? (isTouch ? '床の縁に自動整列 / 続けて配置できます' : '床の縁に自動整列 / 設置後も継続')
-            : (placing.def.id === 'gate'
-                ? (isTouch ? '門を柵の端に自動接続 / 続けて配置できます' : '門を柵の端に自動接続 / 設置後も継続')
-                : (isTouch ? '柵・門の端に自動接続 / 続けて配置できます' : '柵・門の端に自動接続 / 設置後も継続'))) 
-        : (isTouch ? '設置後も続けて配置できます' : 'R: 回転 / Enter・クリック: 設置 / 設置後も継続')));
+    if (waiting) {
+      placeHintEl.textContent = '設置を確認中…';
+    } else if (placing.closingLoop) {
+      placeHintEl.textContent = issue
+        ? `囲いを閉じる位置（${PLACE_ISSUE_TEXT[issue] || '設置できない'}）`
+        : (isTouch ? '囲いを閉じる / タップで接続' : '囲いを閉じる / Enter・クリックで接続');
+    } else if (issue) {
+      placeHintEl.textContent = PLACE_ISSUE_TEXT[issue] || PLACE_ISSUE_TEXT.bad;
+    } else if (placing.snapped) {
+      placeHintEl.textContent = placing.def.id === 'floor'
+        ? (isTouch ? '床の縁に自動整列 / 続けて配置できます' : '床の縁に自動整列 / 設置後も継続')
+        : (placing.def.id === 'gate'
+          ? (isTouch ? '門を柵の端に自動接続 / 続けて配置できます' : '門を柵の端に自動接続 / 設置後も継続')
+          : (isTouch ? '柵・門の端に自動接続 / 続けて配置できます' : '柵・門の端に自動接続 / 設置後も継続'));
+    } else {
+      placeHintEl.textContent = isTouch ? '設置後も続けて配置できます' : 'R: 回転 / Enter・クリック: 設置 / 設置後も継続';
+    }
     placeHintEl.classList.toggle('show', !!placeHintEl.textContent);
   }
 
@@ -5199,6 +5466,8 @@ window.startGame = function(NETINIT){
   let pendingAdminWorldRestore = null;
   const adminAuthStatus = document.getElementById('adminAuthStatus');
   const adminPanel = document.getElementById('adminPanel');
+  const adminEnemyRangeToggle = document.getElementById('adminEnemyRangeToggle');
+  let enemyAttackRangeDisplayEnabled = false; // 初期状態は常にOFF。サーバーの管理者設定だけで変更する。
   const adminPlayersStatus = document.getElementById('adminPlayersStatus');
   const adminPlayerList = document.getElementById('adminPlayerList');
   const adminLoginButton = document.getElementById('adminLoginButton');
@@ -5667,14 +5936,19 @@ window.startGame = function(NETINIT){
         o.material.transparent = true;
         o.material.opacity = 0.55;
         o.material.userData.baseEmissive = o.material.emissive ? o.material.emissive.getHex() : 0;
+        o.material.userData.baseEmissiveIntensity = Number.isFinite(o.material.emissiveIntensity) ? o.material.emissiveIntensity : 1;
       }
     });
     scene.add(ghost);
-    placing = { def, ghost, rot:0, issue:null, snapped:false };
+    placing = { def, ghost, rot:0, issue:null, snapped:false, closingLoop:false, fenceLength:2.0 };
+    fenceChain = null;
+    fenceCloseMarker.visible = false;
     placeBar.classList.add('show');
     applyPlacingIssue(null);
   }
   function cancelPlacing(){
+    fenceChain = null;
+    fenceCloseMarker.visible = false;
     if (!placing) return;
     scene.remove(placing.ghost);
     placing = null;
@@ -5724,9 +5998,11 @@ window.startGame = function(NETINIT){
     // 成功すれば同じ建築物を続けて置け、拒否された場合は正しい資源だけを返せる。
     const g = placing.ghost;
     const request = { t:'place', buildId:def.id, x:g.position.x, y:g.position.y, z:g.position.z, ry:g.rotation.y };
+    if (def.id === 'fence' && placing.closingLoop) request.length = placing.fenceLength;
     pendingPlacement = {
       buildId:def.id, source, cost:{...def.cost},
       x:request.x, y:request.y, z:request.z, ry:request.ry, owner:myPid,
+      ...(Number.isFinite(request.length) ? { length:request.length } : {})
     };
     applyPlacingIssue(placing.issue);
     Net.send(request);
@@ -5756,6 +6032,56 @@ window.startGame = function(NETINIT){
     if (e.code === 'KeyR' && placing) rotatePlacing(e.shiftKey ? -1 : 1);
   });
 
+  function endpointDistance(a, b){ return a && b ? Math.hypot(a.x - b.x, a.z - b.z) : Infinity; }
+  function endpointWithHeight(point, y){ return point ? { x:point.x, y, z:point.z } : null; }
+  function resetFenceChainAt(s){
+    fenceChain = s && s.buildId === 'fence' ? { firstSid:s.sid, lastSid:s.sid, startEndpoint:null, lastEndpoint:null } : null;
+  }
+  function updateFenceChainAfterPlacement(m){
+    if (!placing || placing.def.id !== 'fence' || !m || m.buildId !== 'fence') { fenceChain = null; return; }
+    const current = structureData.get(m.sid);
+    if (!current) { fenceChain = null; return; }
+    if (!fenceChain){ resetFenceChainAt(current); return; }
+
+    const first = structureData.get(fenceChain.firstSid);
+    const last = structureData.get(fenceChain.lastSid);
+    if (!first || !last){ resetFenceChainAt(current); return; }
+    const currentEnds = Shared.fenceEndpoints(current);
+
+    // 今置いた柵が、記憶している終点と始点の両方をつないだら囲いが完成。
+    if (fenceChain.startEndpoint && fenceChain.lastEndpoint &&
+        ((endpointDistance(currentEnds[0], fenceChain.startEndpoint) <= Shared.FENCE_JOIN_TOLERANCE && endpointDistance(currentEnds[1], fenceChain.lastEndpoint) <= Shared.FENCE_JOIN_TOLERANCE) ||
+         (endpointDistance(currentEnds[1], fenceChain.startEndpoint) <= Shared.FENCE_JOIN_TOLERANCE && endpointDistance(currentEnds[0], fenceChain.lastEndpoint) <= Shared.FENCE_JOIN_TOLERANCE))) {
+      fenceChain = null;
+      showToast('柵の囲いが閉じました', '建築');
+      return;
+    }
+
+    const join = Shared.fenceEndpointJoin(last, current);
+    if (!fenceChain.startEndpoint){
+      // 2枚目が最初の柵へ接続した端の反対側を、囲いの始点として記憶する。
+      if (fenceChain.lastSid === fenceChain.firstSid && join){
+        const firstEnds = Shared.fenceEndpoints(first);
+        const startIndex = 1 - join.aIndex;
+        const lastIndex = 1 - join.bIndex;
+        fenceChain.startEndpoint = endpointWithHeight(firstEnds[startIndex], first.y);
+        fenceChain.lastEndpoint = endpointWithHeight(currentEnds[lastIndex], current.y);
+        fenceChain.lastSid = current.sid;
+      } else resetFenceChainAt(current);
+      return;
+    }
+
+    // 続きの柵が現在の開いた終点につながったときだけ、終点を先へ進める。
+    const lastEnds = Shared.fenceEndpoints(last);
+    if (join && endpointDistance(lastEnds[join.aIndex], fenceChain.lastEndpoint) <= Shared.FENCE_JOIN_TOLERANCE){
+      fenceChain.lastEndpoint = endpointWithHeight(currentEnds[1 - join.bIndex], current.y);
+      fenceChain.lastSid = current.sid;
+    } else {
+      // 別の場所へ柵を置き始めた場合は、その新しい柵を次の囲いの始点候補にする。
+      resetFenceChainAt(current);
+    }
+  }
+
   function updatePlacingGhost(){
     // 応答待ちの間は、今送信した位置とゴーストを一致させておく。
     if (!placing || pendingPlacement) return;
@@ -5764,15 +6090,24 @@ window.startGame = function(NETINIT){
     const pz = player.position.z + Math.cos(player.rotation.y) * dist;
     const py = getPlayerFloor(px, pz).y;
     const requestedRy = player.rotation.y + placing.rot;
-    // 柵は既存柵の端、床は既存床の縁へ近づくと自動吸着する。
-    // 判定は shared.js の純粋関数なので、サーバーと設置ルールが食い違わない。
-    const snapped = Shared.snapBuildPlacement(placing.def.id, px, py, pz, requestedRy, structureData.values());
+    // 柵は既存柵の端へ吸着。連続配置中は始点を記憶し、最後の隙間を埋められるなら閉じる形でプレビューする。
+    const snapped = Shared.snapBuildPlacement(placing.def.id, px, py, pz, requestedRy, structureData.values(), placing.def.id === 'fence' ? fenceChain : null);
     placing.ghost.position.set(snapped.x, snapped.y, snapped.z);
     placing.ghost.rotation.y = snapped.ry;
-    const snapChanged = placing.snapped !== snapped.snapped;
+    const nextClosingLoop = placing.def.id === 'fence' && snapped.closingLoop === true;
+    const nextFenceLength = nextClosingLoop && Number.isFinite(snapped.length) ? snapped.length : 2.0;
+    const snapChanged = placing.snapped !== snapped.snapped || placing.closingLoop !== nextClosingLoop || Math.abs((placing.fenceLength || 2) - nextFenceLength) > 0.01;
+    placing.closingLoop = nextClosingLoop;
+    placing.fenceLength = nextFenceLength;
+    // 通常は2m、囲いを閉じる最後の柵だけ端点間の距離に合わせて伸縮。
+    placing.ghost.scale.x = placing.closingLoop ? placing.fenceLength / 2 : 1;
+    fenceCloseMarker.visible = placing.closingLoop && !!snapped.closureTarget;
+    if (fenceCloseMarker.visible){
+      fenceCloseMarker.position.set(snapped.closureTarget.x, snapped.closureTarget.y + 0.18, snapped.closureTarget.z);
+    }
     placing.snapped = snapped.snapped;
-    // 吸着後の座標で地形・重なりを再判定する。
-    const issue = Shared.checkPlacement(placing.def.id, snapped.x, snapped.y, snapped.z, structureData.values(), snapped.ry);
+    // 吸着後の座標・可変長で地形と重なりを再判定する。
+    const issue = Shared.checkPlacement(placing.def.id, snapped.x, snapped.y, snapped.z, structureData.values(), snapped.ry, placing.closingLoop ? placing.fenceLength : undefined);
     if (issue !== placing.issue || snapChanged) applyPlacingIssue(issue);
   }
 
@@ -6784,8 +7119,9 @@ window.startGame = function(NETINIT){
     real.userData.buildName = def.name;
     real.userData.sid = m.sid;
     real.userData.owner = m.owner || '';
-    structureData.set(m.sid, { sid:m.sid, buildId:m.buildId, x:m.x, y:m.y, z:m.z, ry:m.ry, owner:m.owner || '', ...(def.id === 'gate' ? { open:m.open === true } : {}) });
+    structureData.set(m.sid, { sid:m.sid, buildId:m.buildId, x:m.x, y:m.y, z:m.z, ry:m.ry, owner:m.owner || '', ...(def.id === 'fence' && Number.isFinite(m.length) ? { length:m.length } : {}), ...(def.id === 'gate' ? { open:m.open === true } : {}) });
     if (def.id === 'gate') setGateOpenVisual(real, m.open === true, true);
+    if (def.id === 'fence' && Number.isFinite(m.length)) real.scale.x = m.length / 2;
     real.position.set(m.x, m.y, m.z);
     real.rotation.y = m.ry;
     scene.add(real);
@@ -6793,6 +7129,10 @@ window.startGame = function(NETINIT){
     if (def.id === 'floor') placedFloors.push({ mesh: real, radius: FLOOR_RADIUS });
   }
   function removeStructure(sid, mine){
+    if (fenceChain && (fenceChain.firstSid === sid || fenceChain.lastSid === sid)){
+      fenceChain = null;
+      fenceCloseMarker.visible = false;
+    }
     const idx = placedStructures.findIndex(s => s.userData.sid === sid);
     if (idx < 0) return;
     setBulkRecoverHighlight(placedStructures[idx], false);
@@ -6869,6 +7209,17 @@ window.startGame = function(NETINIT){
           else { adminSessionRequested = false; adminPlayerList.replaceChildren(); }
           break;
         }
+        case 'attackRangeDisplayState': {
+          setEnemyAttackRangeDisplayEnabled(m.enabled === true);
+          break;
+        }
+        case 'adminAttackRangeDisplayResult': {
+          adminEnemyRangeToggle.disabled = false;
+          if (typeof m.enabled === 'boolean') setEnemyAttackRangeDisplayEnabled(m.enabled);
+          if (!m.ok) showToast(m.reason === 'unauthorized' ? '管理者認証が必要です' : '攻撃範囲表示を変更できませんでした', '管理');
+          else showToast(m.enabled ? '敵の攻撃範囲表示をONにしました' : '敵の攻撃範囲表示をOFFにしました', '管理');
+          break;
+        }
         case 'adminPlayersResult': {
           if (!adminAuthenticated) break;
           renderAdminPlayers(Array.isArray(m.players) ? m.players : []);
@@ -6930,6 +7281,8 @@ window.startGame = function(NETINIT){
         case 'placed':
           createStructure(m);
           if (m.by === NET_ID){
+            if (m.buildId === 'fence') updateFenceChainAfterPlacement(m);
+            else fenceChain = null;
             sfx.place();
             finishPlacementRequest(true, m.buildId); // 成功しても建築モードは終了しない
           }
@@ -7083,6 +7436,7 @@ window.startGame = function(NETINIT){
         }
         case 'netState':
           netReconnecting = m.state === 'reconnecting';
+          adminEnemyRangeToggle.disabled = false;
           if (adminAuthenticated) {
             adminAuthenticated = false; adminPanel.hidden = true;
             adminLoginButton.hidden = false; adminLogoutButton.hidden = true;
@@ -7106,6 +7460,7 @@ window.startGame = function(NETINIT){
           break;
         case 'disconnected':
           netLost = true; netReconnecting = false;
+          adminEnemyRangeToggle.disabled = false;
           adminAuthenticated = false; adminSessionRequested = false; adminPanel.hidden = true;
           adminLoginButton.hidden = false; adminLogoutButton.hidden = true;
           if (NETINIT.online) adminAuthStatus.textContent = 'サーバーとの接続が切れました。再読み込み後に接続してください。';
@@ -7119,6 +7474,9 @@ window.startGame = function(NETINIT){
   function applyWelcome(W){
     NET_ID = W.id;
     pickupOthers = !!W.pickupOthers;
+    // 再接続ではワールドの建築物を作り直すため、古い連続配置の端点参照を持ち越さない。
+    fenceChain = null;
+    fenceCloseMarker.visible = false;
     for (const id of [...remotes.keys()]) removeRemote(id);
     for (const id of [...enemyById.keys()]) removeEnemy(id);
     for (const sid of [...structureData.keys()]) removeStructure(sid, false);
@@ -7132,10 +7490,13 @@ window.startGame = function(NETINIT){
     // 接続断で設置応答だけ失われた場合は、再接続後のサーバー状態から成否を復元する。
     if (pendingPlacement){
       const tx = pendingPlacement;
-      const accepted = W.structures.some(s => s.buildId === tx.buildId &&
+      const acceptedStructure = W.structures.find(s => s.buildId === tx.buildId &&
         (!tx.owner || s.owner === tx.owner) &&
         Math.abs(s.x - tx.x) < 0.021 && Math.abs(s.y - tx.y) < 0.021 &&
-        Math.abs(s.z - tx.z) < 0.021 && Math.abs(s.ry - tx.ry) < 0.021);
+        Math.abs(s.z - tx.z) < 0.021 && Math.abs(s.ry - tx.ry) < 0.021 &&
+        (Number.isFinite(tx.length) ? Number.isFinite(s.length) && Math.abs(s.length - tx.length) < 0.021 : !Number.isFinite(s.length)));
+      const accepted = !!acceptedStructure;
+      if (accepted && acceptedStructure.buildId === 'fence') updateFenceChainAfterPlacement(acceptedStructure);
       finishPlacementRequest(accepted, tx.buildId);
     }
     for (const idx of W.chests) applyChestOpened(idx, false);
@@ -7392,6 +7753,15 @@ window.startGame = function(NETINIT){
   });
   adminLogoutButton.addEventListener('click', ()=>{ Net.send({ t:'adminLogout' }); adminAuthenticated = false; adminSessionRequested = false; adminPanel.hidden = true; adminLoginButton.hidden = false; adminLogoutButton.hidden = true; document.getElementById('saveAdminKey').value = ''; adminAuthStatus.textContent = 'ログアウトしました。'; adminPlayerList.replaceChildren(); });
   document.getElementById('adminRefreshButton').addEventListener('click', requestAdminPlayers);
+  adminEnemyRangeToggle.addEventListener('change', ()=>{
+    if (!adminAuthenticated || !NETINIT.online){
+      adminEnemyRangeToggle.checked = enemyAttackRangeDisplayEnabled;
+      showToast('オンライン接続と管理者認証が必要です', '管理');
+      return;
+    }
+    adminEnemyRangeToggle.disabled = true;
+    Net.send({ t:'adminSetAttackRangeDisplay', enabled:adminEnemyRangeToggle.checked });
+  });
   document.getElementById('adminBackupButton').addEventListener('click', requestAdminBackup);
   document.getElementById('adminRestoreButton').addEventListener('click', ()=>adminRestoreFile.click());
   adminRestoreFile.addEventListener('change', event=>importAdminWorldBackup(event.target.files && event.target.files[0]));
@@ -7498,7 +7868,18 @@ window.startGame = function(NETINIT){
       heldStructures, BUILDABLES, scene, tryInteract, performAttackHit, startPlacing, confirmPlacing,
       get placing(){ return placing; }, get inCaveIndex(){ return inCaveIndex; }, get playerHp(){ return playerHp; }, handleNet, showToast, attack, enterCave,
       get bulkRecoverWorldSelectMode(){ return bulkRecoverWorldSelectMode; }, toggleBulkRecoverWorldTarget, enterBulkRecoverWorldMode, switchBulkRecoverWorldToList,
-      models: { makeWolfClassic, makeBoarClassic, makeRockLizard, makeCrab, makeJellyfish, makeConiferTree, makeBroadleafTree, makeBush, makeDeadTree, makeCraggyRock, makeFlatRock, makeSpikyRock, makeHerb, makeRuin, makeChest, makeWolf, makeBoar, makeGuardian, makeGuardianBrute, makeCampfire, makeHut, makeCabin, makeFence, makeGate, makeFloor, makeCrystalCluster, makeUnderwaterSeaweed, makeUnderwaterCoral, makeSunkenShipwreck,
+      models: { makeWolf, makeBoar, makeWolfClassic, makeBoarClassic, makeRockLizard, makeCrab, makeJellyfish, makeConiferTree, makeBroadleafTree, makeBush, makeDeadTree, makeCraggyRock, makeFlatRock, makeSpikyRock, makeHerb, makeRuin, makeChest, makeGuardian, makeGuardianBrute, makeCampfire, makeHut, makeCabin, makeFence, makeGate, makeFloor, makeCrystalCluster, makeUnderwaterSeaweed, makeUnderwaterCoral, makeSunkenShipwreck,
+        animalPose:(kind, state='walk')=>{
+          const maker={wolf:makeWolf,boar:makeBoar,wolfClassic:makeWolfClassic,boarClassic:makeBoarClassic}[kind];
+          if(!maker) throw new Error('unknown animal: '+kind);
+          const g=maker(), en={id:3,kind:kind.replace('Classic',''),awake:true,moveSpeed:state==='run'?4:state==='walk'?1.4:0,ph:0,wp:0,stT:0,hitFlash:0};
+          if(state==='prep'){en.ph=1;en.wp=0.9;}
+          else if(state==='attack') en.ph=2;
+          else if(state==='recoil'){en.ph=3;en.stT=0.1;en.hitFlash=0.18;}
+          else if(state==='death'){en.dying=true;en.dieT=0.28;}
+          for(let i=0;i<36;i++) g.userData.anim(1+i/60,en,1/60);
+          return g;
+        },
         lizardPose:(kind) => { // 動きの確認用: 歩き(2つの位相)・噛みつき・起きる瞬間
           const g = makeRockLizard(), en = { awake:false, id:0, moveSpeed:0, atkT:0 };
           for (let i = 0; i < 30; i++) g.userData.anim(0.5, en, 0.016);

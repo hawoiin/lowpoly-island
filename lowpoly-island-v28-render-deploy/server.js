@@ -15,6 +15,8 @@ const PICKUP_OTHERS = process.env.PICKUP_OTHERS === '1'; // 1 なら他人の建
 // 管理操作と共有ワールドの復元は全員に影響するため、サーバー側の管理者キーを要求する。
 // 未指定ならサーバー起動ごとに推測不能なキーを生成し、ホストのコンソールにだけ表示する。
 const SAVE_ADMIN_TOKEN = process.env.SAVE_ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
+// 敵の攻撃予告範囲はサーバー起動時OFF。管理者が有効化した場合だけ全参加者へ反映する。
+let enemyAttackRangeDisplayEnabled = false;
 
 let saved = null;
 try { saved = JSON.parse(fs.readFileSync(SAVE_FILE, 'utf8')); } catch (e) { /* 初回起動 */ }
@@ -91,6 +93,8 @@ wss.on('connection', ws => {
   const refill = setInterval(() => { budget = 120; }, 1000);
 
   ws.send(JSON.stringify(sim.addClient(id)));
+  // 再参加者も現在の管理者設定を受け取る。新規サーバー起動時の既定値はOFF。
+  sendJson(ws, { t:'attackRangeDisplayState', enabled:enemyAttackRangeDisplayEnabled });
 
   ws.on('message', data => {
     if (--budget < 0) return;
@@ -122,6 +126,21 @@ wss.on('connection', ws => {
       if (m.t === 'adminLogout') {
         ws.isAdmin = false;
         sendJson(ws, { t:'adminLoggedOut' });
+        return;
+      }
+      if (m.t === 'adminSetAttackRangeDisplay') {
+        if (!ws.isAdmin) {
+          sendJson(ws, { t:'adminAttackRangeDisplayResult', ok:false, enabled:enemyAttackRangeDisplayEnabled, reason:'unauthorized' });
+          return;
+        }
+        if (typeof m.enabled !== 'boolean') {
+          sendJson(ws, { t:'adminAttackRangeDisplayResult', ok:false, enabled:enemyAttackRangeDisplayEnabled, reason:'invalid' });
+          return;
+        }
+        enemyAttackRangeDisplayEnabled = m.enabled;
+        // 全参加者へ同期。これは見た目だけの設定で、攻撃判定・ダメージは変わらない。
+        sim.out.broadcast({ t:'attackRangeDisplayState', enabled:enemyAttackRangeDisplayEnabled });
+        sendJson(ws, { t:'adminAttackRangeDisplayResult', ok:true, enabled:enemyAttackRangeDisplayEnabled });
         return;
       }
       if (m.t === 'adminPlayers') {
