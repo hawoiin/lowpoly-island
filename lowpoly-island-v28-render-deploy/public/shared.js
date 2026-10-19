@@ -85,6 +85,10 @@
               moves: { pinch: { trigger: 1.5, windup: 0.4, dur: 0.1, hitR: 1.7, hurt: 6, recover: 0.5, cd: 1.0 } } },
     jelly:  { hp: 5, speed: 0.9, body: 0.4,  aggroR: 6, hurt: 8,  reach: 1.5, cd: 2.0, water: true, hold: 2.0,
               moves: { pulse: { trigger: 2.6, windup: 0.9, dur: 0.2, hitR: 2.8, hurt: 8, recover: 1.2, cd: 1.5 } } },
+    // 野営地の人型番人。既存の近接攻撃ステート(lunge)を再利用し、攻撃時は棍棒を振る。
+    // dash:false のため突進せず、その場で予備動作→一撃→隙を作る。
+    raider: { hp: 10, speed: 1.9, body: 0.48, aggroR: 9, hurt: 9, reach: 1.6, cd: 1.4, turn: 8,
+              moves: { lunge: { trigger: 2.65, windup: 0.62, dur: 0.16, speed: 0, hitR: 1.65, hurt: 9, recover: 0.8, cd: 1.4, dash: false } } },
   };
   // 技の番号(スナップショットで送る。 状態コード = (段階+1)*10 + 技番号。段階: 0=予備動作 1=本攻撃 2=のけぞり。 0 は技なし)
   const MOVE_ID = { lunge: 1, bite: 2, whip: 3, pulse: 4, charge: 5, pinch: 6 };
@@ -97,7 +101,7 @@
     Array(ENEMY_LIZARD_COUNT).fill('lizard'), Array(ENEMY_CRAB_COUNT).fill('crab'), Array(ENEMY_JELLY_COUNT).fill('jelly'),
     Array(ENEMY_CLASSIC_WOLF_COUNT).fill('wolfClassic'), Array(ENEMY_CLASSIC_BOAR_COUNT).fill('boarClassic'));
   // 野営地の見張り(さらに後ろに追加。既存の敵の id は変えない)。野営地のまわりだけを持ち場にする
-  const ENEMY_CAMP_KINDS = ['wolf', 'wolf', 'wolf', 'lizard'];
+  const ENEMY_CAMP_KINDS = ['raider', 'raider', 'raider', 'raider'];
   const ENEMY_CAMP_START = ENEMY_ORDER.length;
   for (const k of ENEMY_CAMP_KINDS) ENEMY_ORDER.push(k);
   const ENEMY_GROTTO_START = ENEMY_ORDER.length;
@@ -386,20 +390,48 @@
   // 位置は seed から再現できる。回復の判定はクライアント側(HP がクライアント権威のため)。
   const SPRING = { radius: 3.2, healRate: 4, footR: 3.6 };
 
-  function springSiteOk(x, z, ruins, avoid) {
+  // 泉の縁の装飾を、その地点の地形高さに合わせるためのローカルY差分。
+  // centerY は泉の基準高さ、x/z は装飾パーツのワールド座標。
+  // 地形生成・当たり判定・泉の配置位置そのものは変更しない。
+  function springTerrainOffset(centerY, x, z) {
+    return islandHeight(x, z) - centerY;
+  }
+
+  function springSiteOk(x, z, ruins, avoid, flatOnly) {
     const h = islandHeight(x, z);
     if (h < 1.6 || h > 6 || isInsideCaveArea(x, z, 12)) return false;
     if (Math.hypot(x, z - 6) < 30) return false; // 初期位置のそばは避ける(遠出して見つける場所にする)
     for (const r of ruins) if (Math.hypot(r.x - x, r.z - z) < 14) return false;
     for (const a of avoid) if (Math.hypot(a.x - x, a.z - z) < a.gap) return false;
-    for (let k = 0; k < 12; k++) { // 池のふち(footR)まで陸で、ほぼ平ら
-      const ang = k / 12 * Math.PI * 2, hh = islandHeight(x + Math.cos(ang) * SPRING.footR, z + Math.sin(ang) * SPRING.footR);
-      if (hh < 0.9 || Math.abs(hh - h) > 0.7) return false;
+
+    if (!flatOnly) {
+      // 旧泉候補ルール。既存の野営地位置を同じseedで維持する互換計算だけに使用する。
+      for (let k = 0; k < 12; k++) {
+        const ang = k / 12 * Math.PI * 2;
+        const hh = islandHeight(x + Math.cos(ang) * SPRING.footR, z + Math.sin(ang) * SPRING.footR);
+        if (hh < 0.9 || Math.abs(hh - h) > 0.7) return false;
+      }
+      return true;
     }
+
+    // 水面と池底は水平のままにするため、泉の footprint 全体が平坦な場所だけを採用。
+    // 中間リングと外周を複数点サンプリングし、中心を含む高低差を38cm以内に制限する。
+    // 外周だけで判定する旧方式では、池の内側に斜面が入り込む場所を見逃すことがあった。
+    const terrainHeights = [h];
+    for (const [radius, samples] of [[SPRING.footR * 0.5, 8], [SPRING.footR, 16]]) {
+      for (let k = 0; k < samples; k++) {
+        const ang = k / samples * Math.PI * 2;
+        const hh = islandHeight(x + Math.cos(ang) * radius, z + Math.sin(ang) * radius);
+        if (hh < 0.9) return false; // 池の縁まで陸であること
+        terrainHeights.push(hh);
+      }
+    }
+    if (Math.max(...terrainHeights) - Math.min(...terrainHeights) > 0.38) return false;
     return true;
   }
 
-  function getSpringLocations(seed, count) {
+  // flatOnly=true は実際の泉配置。false は野営地の旧座標を維持するためだけの互換計算。
+  function generateSpringLocations(seed, count, flatOnly) {
     count = Number.isInteger(count) ? Math.max(0, Math.min(4, count)) : 2;
     const random = mulberry32(((seed >>> 0) ^ 0x5d3f91b7) >>> 0);
     const ruins = getRuinLocations(seed, 6);
@@ -408,14 +440,21 @@
     if (boss) avoid.push({ x: boss.x, z: boss.z, gap: 24 });
     const lighthouse = getLighthouseLocation(seed);
     if (lighthouse) avoid.push({ x: lighthouse.x, z: lighthouse.z, gap: 22 });
+    if (flatOnly) {
+      // 野営地の既存座標は変えず、新しい泉側が野営地から30m以上離れるようにする。
+      // getCampLocation は旧泉候補ルールで計算するため、ここから呼んでも再帰しない。
+      const camp = getCampLocation(seed);
+      if (camp) avoid.push({ x: camp.x, z: camp.z, gap: 30 });
+    }
     const springs = [];
+    const maxAttempts = flatOnly ? 3000 : 400;
     for (let i = 0; i < count; i++) {
       let placed = null;
-      for (let attempt = 0; attempt < 400 && !placed; attempt++) {
+      for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
         const ang = random() * Math.PI * 2;
         const r = 35 + random() * (WORLD_SIZE * 0.36 - 35);
         const x = Math.round(Math.cos(ang) * r * 100) / 100, z = Math.round(Math.sin(ang) * r * 100) / 100;
-        if (!springSiteOk(x, z, ruins, avoid)) continue;
+        if (!springSiteOk(x, z, ruins, avoid, flatOnly)) continue;
         placed = { x, y: Math.round(islandHeight(x, z) * 100) / 100, z };
       }
       if (!placed) continue;
@@ -423,6 +462,15 @@
       avoid.push({ x: placed.x, z: placed.z, gap: 60 }); // 泉どうしは離す
     }
     return springs;
+  }
+
+  function getSpringLocations(seed, count) {
+    return generateSpringLocations(seed, count, true);
+  }
+
+  // 野営地配置の互換用。画面に表示・実際に回復に使う泉の位置ではない。
+  function getLegacySpringLocations(seed, count) {
+    return generateSpringLocations(seed, count, false);
   }
 
   // ---- 敵の野営地: 見張りの狼たちが守る小さな陣地。見張りを倒すと戦利品の箱が開けられる(seed から再現できる) ----
@@ -441,6 +489,44 @@
     return true;
   }
 
+  // 旧バージョンの泉候補計算。野営地の既存座標が泉の再配置だけで動いてしまわないよう、
+  // getCampLocation の配置判定に限って使用する。新しい泉の見た目・実際の配置には使わない。
+  function getLegacySpringLocations(seed, count) {
+    count = Number.isInteger(count) ? Math.max(0, Math.min(4, count)) : 2;
+    const random = mulberry32(((seed >>> 0) ^ 0x5d3f91b7) >>> 0);
+    const ruins = getRuinLocations(seed, 6);
+    const avoid = [];
+    const boss = getBossHome(seed);
+    if (boss) avoid.push({ x: boss.x, z: boss.z, gap: 24 });
+    const lighthouse = getLighthouseLocation(seed);
+    if (lighthouse) avoid.push({ x: lighthouse.x, z: lighthouse.z, gap: 22 });
+    const springs = [];
+    for (let i = 0; i < count; i++) {
+      let placed = null;
+      for (let attempt = 0; attempt < 400 && !placed; attempt++) {
+        const ang = random() * Math.PI * 2;
+        const r = 35 + random() * (WORLD_SIZE * 0.36 - 35);
+        const x = Math.round(Math.cos(ang) * r * 100) / 100, z = Math.round(Math.sin(ang) * r * 100) / 100;
+        const h = islandHeight(x, z);
+        if (h < 1.6 || h > 6 || isInsideCaveArea(x, z, 12) || Math.hypot(x, z - 6) < 30) continue;
+        if (ruins.some(q => Math.hypot(q.x - x, q.z - z) < 14)) continue;
+        if (avoid.some(q => Math.hypot(q.x - x, q.z - z) < q.gap)) continue;
+        let okay = true;
+        for (let k = 0; k < 12; k++) {
+          const a = k / 12 * Math.PI * 2;
+          const hh = islandHeight(x + Math.cos(a) * SPRING.footR, z + Math.sin(a) * SPRING.footR);
+          if (hh < 0.9 || Math.abs(hh - h) > 0.7) { okay = false; break; }
+        }
+        if (!okay) continue;
+        placed = { x, y: Math.round(h * 100) / 100, z };
+      }
+      if (!placed) continue;
+      springs.push(placed);
+      avoid.push({ x: placed.x, z: placed.z, gap: 60 });
+    }
+    return springs;
+  }
+
   function getCampLocation(seed) {
     const random = mulberry32(((seed >>> 0) ^ 0x3e7a52c1) >>> 0);
     const ruins = getRuinLocations(seed, 6);
@@ -449,7 +535,7 @@
     if (boss) avoid.push({ x: boss.x, z: boss.z, gap: 26 });
     const lighthouse = getLighthouseLocation(seed);
     if (lighthouse) avoid.push({ x: lighthouse.x, z: lighthouse.z, gap: 24 });
-    for (const sp of getSpringLocations(seed, 2)) avoid.push({ x: sp.x, z: sp.z, gap: 30 });
+    for (const sp of getLegacySpringLocations(seed, 2)) avoid.push({ x: sp.x, z: sp.z, gap: 30 });
     for (let attempt = 0; attempt < 600; attempt++) {
       const ang = random() * Math.PI * 2;
       const r = 60 + random() * (WORLD_SIZE * 0.4 - 60);
@@ -587,29 +673,94 @@
   // 柵は長さ2m。端どうしが合う配置だけは、円形の設置半径が重なっても許可する。
   // THREE.js の Y 回転に合わせ、ローカルX軸の端点をワールド座標へ変換する。
   const FENCE_HALF_LENGTH = 1.0;
+  const FENCE_MIN_LENGTH = 0.65; // 囲いを閉じる最後の一枚は、短くなりすぎない範囲で伸縮できる
+  const FENCE_MAX_LENGTH = 2.6;
   const FENCE_JOIN_TOLERANCE = 0.14;
   const FLOOR_SNAP_SPACING = BUILD_RADIUS.floor * 1.9; // 床の外枠半径(0.95R)に合わせて縁を接近させる
   const FENCE_SNAP_DISTANCE = 1.25;
   const FLOOR_SNAP_DISTANCE = 1.35;
 
+  function isFenceLike(buildId) { return buildId === 'fence' || buildId === 'gate'; }
+
+  // 通常の柵と門は2m。囲いの最後を閉じるために伸縮した柵だけ、保存された長さを使う。
+  function fenceLength(s) {
+    return s && s.buildId === 'fence' && Number.isFinite(s.length)
+      ? clamp(s.length, FENCE_MIN_LENGTH, FENCE_MAX_LENGTH) : FENCE_HALF_LENGTH * 2;
+  }
+
   function fenceEndpoints(s) {
     const ry = Number.isFinite(s.ry) ? s.ry : 0;
-    const dx = Math.cos(ry) * FENCE_HALF_LENGTH;
-    const dz = -Math.sin(ry) * FENCE_HALF_LENGTH;
+    const halfLength = fenceLength(s) * 0.5;
+    const dx = Math.cos(ry) * halfLength;
+    const dz = -Math.sin(ry) * halfLength;
     return [
       { x: s.x - dx, z: s.z - dz },
       { x: s.x + dx, z: s.z + dz },
     ];
   }
 
-  function isFenceLike(buildId) { return buildId === 'fence' || buildId === 'gate'; }
-
-  function fenceEndsMeet(a, b) {
+  // 接続している端点の組を返す。設置後の連結経路を追跡するときにも使う。
+  function fenceEndpointJoin(a, b) {
     const ae = fenceEndpoints(a), be = fenceEndpoints(b);
-    for (const ap of ae) for (const bp of be) {
-      if (Math.hypot(ap.x - bp.x, ap.z - bp.z) <= FENCE_JOIN_TOLERANCE) return true;
+    let best = null;
+    for (let ai = 0; ai < ae.length; ai++) for (let bi = 0; bi < be.length; bi++) {
+      const distance = Math.hypot(ae[ai].x - be[bi].x, ae[ai].z - be[bi].z);
+      if (distance <= FENCE_JOIN_TOLERANCE && (!best || distance < best.distance)) best = { aIndex:ai, bIndex:bi, distance };
     }
-    return false;
+    return best;
+  }
+
+  function fenceEndsMeet(a, b) { return !!fenceEndpointJoin(a, b); }
+
+  function fenceEndpointIsOpen(point, ignoreSid, structures) {
+    for (const s of structures) {
+      if (!isFenceLike(s.buildId) || (ignoreSid != null && s.sid === ignoreSid)) continue;
+      for (const endpoint of fenceEndpoints(s)) {
+        if (Math.hypot(point.x - endpoint.x, point.z - endpoint.z) <= FENCE_JOIN_TOLERANCE) return false;
+      }
+    }
+    return true;
+  }
+
+  // 最後の柵が始点の開いた端へ届く範囲なら、その区間だけ長さと角度を自動計算する。
+  // プレビュー中心が通常の「最後の端点に次の2m柵を接続する位置」に近い場合だけ発動する。
+  function snapFenceLoopClosure(x, y, z, ry, structures, chain) {
+    if (!chain || !chain.startEndpoint || !chain.lastEndpoint) return null;
+    const start = chain.startEndpoint, last = chain.lastEndpoint;
+    const firstSegment = structures.find(s => s.sid === chain.firstSid);
+    const lastSegment = structures.find(s => s.sid === chain.lastSid);
+    if (!firstSegment || !lastSegment ||
+        !fenceEndpoints(firstSegment).some(p => Math.hypot(p.x - start.x, p.z - start.z) <= FENCE_JOIN_TOLERANCE) ||
+        !fenceEndpoints(lastSegment).some(p => Math.hypot(p.x - last.x, p.z - last.z) <= FENCE_JOIN_TOLERANCE)) return null;
+    if (!fenceEndpointIsOpen(start, chain.firstSid, structures) ||
+        !fenceEndpointIsOpen(last, chain.lastSid, structures)) return null;
+    if (!Number.isFinite(start.y) || !Number.isFinite(last.y) || Math.abs(start.y - last.y) > 0.35) return null;
+    const dx = last.x - start.x, dz = last.z - start.z;
+    const length = Math.hypot(dx, dz);
+    if (length < FENCE_MIN_LENGTH || length > FENCE_MAX_LENGTH) return null;
+
+    const safeRy = Number.isFinite(ry) ? ry : 0;
+    const axisX = Math.cos(safeRy), axisZ = -Math.sin(safeRy);
+    let cursorDistance = Infinity;
+    // 「通常の2m柵が最後の端点へ接続する中心位置」からの距離を判定する。
+    for (const sign of [-1, 1]) {
+      const cx = last.x - sign * axisX * FENCE_HALF_LENGTH;
+      const cz = last.z - sign * axisZ * FENCE_HALF_LENGTH;
+      cursorDistance = Math.min(cursorDistance, Math.hypot(cx - x, cz - z));
+    }
+    if (cursorDistance > FENCE_SNAP_DISTANCE) return null;
+
+    // ローカルXの両端がstart/lastに合うように、Three.jsのY回転と一致する角度で配置する。
+    return {
+      x:(start.x + last.x) * 0.5,
+      y:(start.y + last.y) * 0.5,
+      z:(start.z + last.z) * 0.5,
+      ry:Math.atan2(-dz, dx),
+      length,
+      snapped:true,
+      closingLoop:true,
+      closureTarget:{ x:start.x, y:start.y, z:start.z },
+    };
   }
 
   // 柵の見た目は Three.js の Y 回転(ワールドXZ上では +X軸が (cosθ, -sinθ) へ回る)に従う。
@@ -635,7 +786,8 @@
         // inverse Three.js Y rotation: localX = cos*dx - sin*dz; localZ = sin*dx + cos*dz
         const lx = c * dx - sn * dz;
         const lz = sn * dx + c * dz;
-        const clampedX = Math.max(-FENCE_COLLISION_HALF_LENGTH, Math.min(FENCE_COLLISION_HALF_LENGTH, lx));
+        const halfLength = Math.max(0.2, fenceLength(s) * 0.5 - 0.05);
+        const clampedX = Math.max(-halfLength, Math.min(halfLength, lx));
         const ddx = lx - clampedX, ddz = lz;
         const dist = Math.hypot(ddx, ddz);
         if (dist >= minDist) continue;
@@ -680,9 +832,32 @@
     return { x:px, z:pz };
   }
 
+  function crossXZ(a, b, c) { return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x); }
+  function segmentsIntersectXZ(a, b, c, d) {
+    const abC = crossXZ(a, b, c), abD = crossXZ(a, b, d);
+    const cdA = crossXZ(c, d, a), cdB = crossXZ(c, d, b);
+    const eps = 1e-8;
+    if (((abC > eps && abD < -eps) || (abC < -eps && abD > eps)) &&
+        ((cdA > eps && cdB < -eps) || (cdA < -eps && cdB > eps))) return true;
+    const onSegment = (p, q, r) => Math.abs(crossXZ(p, q, r)) <= eps &&
+      r.x >= Math.min(p.x, q.x) - eps && r.x <= Math.max(p.x, q.x) + eps &&
+      r.z >= Math.min(p.z, q.z) - eps && r.z <= Math.max(p.z, q.z) + eps;
+    return onSegment(a, b, c) || onSegment(a, b, d) || onSegment(c, d, a) || onSegment(c, d, b);
+  }
+  function fenceSegmentDistance(a, b) {
+    const ae = fenceEndpoints(a), be = fenceEndpoints(b);
+    if (segmentsIntersectXZ(ae[0], ae[1], be[0], be[1])) return 0;
+    return Math.min(
+      pointSegmentDistanceXZ(ae[0].x, ae[0].z, be[0], be[1]),
+      pointSegmentDistanceXZ(ae[1].x, ae[1].z, be[0], be[1]),
+      pointSegmentDistanceXZ(be[0].x, be[0].z, ae[0], ae[1]),
+      pointSegmentDistanceXZ(be[1].x, be[1].z, ae[0], ae[1])
+    );
+  }
+
   // 置けない理由のコードを返す(置けるなら null)。structures は {buildId,x,y,z,ry} を持つものの列
   //   far=島の外 / height=地面から離れすぎ / sea=海辺・水上 / cave=洞窟の外観エリア / overlap=他の建物と重なる
-  function checkPlacement(buildId, x, y, z, structures, ry) {
+  function checkPlacement(buildId, x, y, z, structures, ry, length) {
     const r = BUILD_RADIUS[buildId];
     if (!r) return 'bad';
     if (Math.hypot(x, z) > WORLD_SIZE * 0.5) return 'far';
@@ -695,8 +870,18 @@
     }
     if (isInsideCaveArea(x, z, r)) return 'cave';
     for (const s of structures) {
-      // 柵の端どうしを接続する角は許可する。ただし柵の中央同士が交差する配置は従来どおり拒否。
-      if (isFenceLike(buildId) && isFenceLike(s.buildId) && fenceEndsMeet({ x, z, ry: Number.isFinite(ry) ? ry : 0 }, s)) continue;
+      // 柵の端どうしを接続する角は許可する。
+      const fenceCandidate = { buildId, x, z, ry:Number.isFinite(ry) ? ry : 0,
+        ...(buildId === 'fence' && Number.isFinite(length) ? { length } : {}) };
+      if (isFenceLike(buildId) && isFenceLike(s.buildId)) {
+        if (fenceEndsMeet(fenceCandidate, s)) continue;
+        // 長さ調整する最後の柵だけは中心同士の円形判定だと角の近くで誤って拒否しやすい。
+        // 伸縮柵は実際の線分同士が交差・接触した場合だけ重なりと判断する。
+        if (buildId === 'fence' && Number.isFinite(length)) {
+          if (fenceSegmentDistance(fenceCandidate, s) < 0.12) return 'overlap';
+          continue;
+        }
+      }
       const bothFloors = buildId === 'floor' && s.buildId === 'floor';
       if (!bothFloors && (buildId === 'floor' || s.buildId === 'floor')) continue; // 床の上には他の建物を置ける
       const minDist = (r + (BUILD_RADIUS[s.buildId] || 1)) * 0.9;
@@ -709,12 +894,17 @@
   // 建築ゴーストを既存パーツの接続位置へ吸着する純粋関数。
   // 柵は向きを保ったまま端点どうしを接続し、床は既存床の向きと高さを引き継いで縁へ並べる。
   // 遠いときは入力座標をそのまま返すため、自由配置の操作感は変わらない。
-  function snapBuildPlacement(buildId, x, y, z, ry, structures) {
+  function snapBuildPlacement(buildId, x, y, z, ry, structures, fenceChain) {
     const list = Array.from(structures || []);
     const original = { x, y, z, ry, snapped: false };
     const snapDistance = isFenceLike(buildId) ? FENCE_SNAP_DISTANCE :
       (buildId === 'floor' ? FLOOR_SNAP_DISTANCE : 0);
     if (!snapDistance) return original;
+
+    if (buildId === 'fence') {
+      const closure = snapFenceLoopClosure(x, y, z, ry, list, fenceChain);
+      if (closure) return closure;
+    }
 
     let best = null;
     let bestDist = snapDistance;
@@ -722,7 +912,7 @@
       const d = Math.hypot(candidate.x - x, candidate.z - z);
       if (d > bestDist) return;
       // 競合する床や交差する柵など、設置できない吸着先は候補にしない。
-      if (checkPlacement(buildId, candidate.x, candidate.y, candidate.z, list, candidate.ry)) return;
+      if (checkPlacement(buildId, candidate.x, candidate.y, candidate.z, list, candidate.ry, candidate.length)) return;
       best = candidate;
       bestDist = d;
     };
@@ -899,7 +1089,7 @@
   }
 
   // ---- 体の当たり判定(プレイヤー・敵が重ならないための半径と押し出し) ----
-  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, boss: BOSS_RADIUS };
+  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, boss: BOSS_RADIUS };
   // 点 (x,z) を、中心 (ox,oz) から minDist 以上離れるように押し出す移動量。離れていれば null
   function bodyPush(x, z, ox, oz, minDist) {
     const dx = x - ox, dz = z - oz;
@@ -983,6 +1173,7 @@
           if (!Number.isSafeInteger(s.sid) || s.sid < 1 || s.sid > 1000000000 || seenSids.has(s.sid)) continue;
           if (!BUILD_IDS.includes(s.buildId)) continue;
           if (![s.x, s.y, s.z, s.ry].every(v => typeof v === 'number' && Number.isFinite(v))) continue;
+          if (s.length !== undefined && (s.buildId !== 'fence' || typeof s.length !== 'number' || !Number.isFinite(s.length) || s.length < FENCE_MIN_LENGTH || s.length > FENCE_MAX_LENGTH)) continue;
           // 通常の建築判定と同じ円形の島境界で検証する(四角い境界だと海上の角に復元される)。
           if (Math.hypot(s.x, s.z) > WORLD_SIZE * 0.5 || s.y < -100 || s.y > 200 || Math.abs(s.ry) > 1000) continue;
           if (this.structures.size >= MAX_STRUCTURES) break;
@@ -990,6 +1181,7 @@
             sid: s.sid, buildId: s.buildId, x: s.x, y: s.y, z: s.z, ry: s.ry,
             owner: typeof s.owner === 'string' ? s.owner.slice(0, 64) : ''
           };
+          if (s.buildId === 'fence' && Number.isFinite(s.length)) clean.length = s.length;
           if (s.buildId === 'gate') clean.open = s.open === true;
           this.structures.set(clean.sid, clean);
           seenSids.add(clean.sid);
@@ -1329,14 +1521,17 @@
             return;
           }
           const x = msg.x, y = msg.y, z = msg.z, ry = msg.ry;
+          const hasCustomLength = Object.prototype.hasOwnProperty.call(msg, 'length');
+          const customLengthValid = buildId === 'fence' && typeof msg.length === 'number' && Number.isFinite(msg.length) && msg.length >= FENCE_MIN_LENGTH && msg.length <= FENCE_MAX_LENGTH;
           let reason = null;
           if (c.cave >= 0) reason = 'cave';
-          else if (!BUILD_IDS.includes(buildId)) reason = 'bad';
+          else if (!BUILD_IDS.includes(buildId) || (hasCustomLength && !customLengthValid)) reason = 'bad';
           else if (this.structures.size >= MAX_STRUCTURES) reason = 'limit';
           else if (Math.hypot(x - c.x, z - c.z) > 14) reason = 'distance';
-          else reason = checkPlacement(buildId, x, y, z, this.structures.values(), ry);
+          else reason = checkPlacement(buildId, x, y, z, this.structures.values(), ry, customLengthValid ? msg.length : undefined);
           if (reason) { this.out.sendTo(id, { t: 'placeDenied', buildId, reason }); return; }
           const s = { sid: this.nextSid++, buildId, x: r2(x), y: r2(y), z: r2(z), ry: r2(ry), owner: c.pid };
+          if (customLengthValid) s.length = r2(msg.length);
           if (buildId === 'gate') s.open = false;
           this.structures.set(s.sid, s);
           this.out.broadcast(Object.assign({ t: 'placed', by: id }, s));
@@ -1843,7 +2038,8 @@
             !BUILD_IDS.includes(s.buildId) || ![s.x, s.y, s.z, s.ry].every(v => typeof v === 'number' && Number.isFinite(v)) ||
             Math.hypot(s.x, s.z) > WORLD_SIZE * 0.5 || s.y < -100 || s.y > 200 || Math.abs(s.ry) > 1000 ||
             (s.owner !== undefined && (typeof s.owner !== 'string' || s.owner.length > 64)) ||
-            (s.open !== undefined && typeof s.open !== 'boolean')) return { ok:false, reason:'invalid' };
+            (s.open !== undefined && typeof s.open !== 'boolean') ||
+            (s.length !== undefined && (s.buildId !== 'fence' || typeof s.length !== 'number' || !Number.isFinite(s.length) || s.length < FENCE_MIN_LENGTH || s.length > FENCE_MAX_LENGTH))) return { ok:false, reason:'invalid' };
         sids.add(s.sid); maxSid = Math.max(maxSid, s.sid);
       }
       if (!Number.isSafeInteger(saved.nextSid) || saved.nextSid <= maxSid || saved.nextSid > 1000000000) return { ok:false, reason:'invalid' };
@@ -1879,7 +2075,8 @@
 
   return {
     WORLD_SIZE, noise2, islandHeight, mulberry32, WorldSim, MAX_BULK_PICKUP_IDS,
-    WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
+    WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, springTerrainOffset, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
+    FENCE_MIN_LENGTH, FENCE_MAX_LENGTH, FENCE_JOIN_TOLERANCE, fenceEndpoints, fenceEndpointJoin, fenceEndsMeet,
     ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
     CHAT_MAX_CHARS, CHAT_INTERVAL_MS, EMOTE_COUNT, cleanChat, BODY_RADIUS, bodyPush,
     isValidCavePosition, isValidCaveTransition, MAX_PLAYER_SPEED, HIT_COOLDOWN_MS, MAX_TRACKED_TAKEN,
