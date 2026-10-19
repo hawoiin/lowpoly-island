@@ -86,7 +86,7 @@ check('クラゲは洞窟の中(壁の輪の内側)に生きて出現する', je
   const opened = [];
   sim.out = { sendTo() {}, broadcast: m => { if (m.t === 'chestOpened') opened.push(m); } };
   const idx = sim.chestLocations.findIndex(c => c.grotto);
-  check('宝箱の最後(6番)が海底洞窟の奥の宝箱で、入口の反対側・洞窟の中にある', idx === 6 && sim.chestLocations.length === 7 && sim.chestLocations[idx].underwater === true &&
+  check('既存index 6の海底洞窟の奥の宝箱は位置・番号を維持し、追加野営地の箱は末尾に置かれる', idx === 6 && sim.chestLocations.length === 9 && sim.chestLocations[7].campIndex === 1 && sim.chestLocations[8].campIndex === 2 && sim.chestLocations[idx].underwater === true &&
     Math.hypot(sim.chestLocations[idx].x - G.x, sim.chestLocations[idx].z - G.z) < GR.R - 1 &&
     ((sim.chestLocations[idx].x - G.x) * Math.cos(G.ry) + (sim.chestLocations[idx].z - G.z) * Math.sin(G.ry)) < 0);
   const chest = sim.chestLocations[idx];
@@ -106,7 +106,7 @@ check('クラゲは洞窟の中(壁の輪の内側)に生きて出現する', je
 // ---- セーブ互換 ----
 {
   const old = new Shared.WorldSim({ saved: { layoutVersion: Shared.WORLD_LAYOUT_VERSION, seed, nextSid: 1, structures: [], chests: [0, 1, 2, 3, 4, 5] } });
-  check('宝箱6個まで開けた古いセーブを読み込んでも、洞窟の宝箱(6番)は未開封のまま', old.chests.size === 6 && !old.chests.has(6) && old.chestLocations.length === 7);
+  check('宝箱6個まで開けた古いセーブを読み込んでも、洞窟の宝箱(6番)は未開封のまま(追加分は末尾)', old.chests.size === 6 && !old.chests.has(6) && old.chestLocations.length === 9);
   const world = i => ({ layoutVersion: Shared.WORLD_LAYOUT_VERSION, seed: 123456, nextSid: 1, structures: [], chests: i });
   const player = { inv:{ wood:0, stone:0, herb:0, crystal:0, relic:0 }, collected:{}, discovered:[], swordLv:1, held:{ campfire:0, hut:0, cabin:0, fence:0, floor:0 }, claimed:{ plant:false, mineral:false, relic:false, underwater:false }, codexDone:false, seenCaves:[] };
   const settings = { volume:0.7, sens:1, shake:true };
@@ -116,8 +116,8 @@ check('クラゲは洞窟の中(壁の輪の内側)に生きて出現する', je
   }
   check('JSONバックアップは洞窟(6番)の宝箱の開封状態も読み戻せる', okAll);
   let rejected = false;
-  try { SaveFormat.parseBundle(JSON.stringify(SaveFormat.createBundle(player, settings, world([7])))); } catch (_) { rejected = true; }
-  check('存在しない宝箱の番号(7番)は拒否される', rejected);
+  try { SaveFormat.parseBundle(JSON.stringify(SaveFormat.createBundle(player, settings, world([9])))); } catch (_) { rejected = true; }
+  check('存在しない宝箱の番号(9番)は拒否される', rejected);
 }
 
 console.log(failures ? 'FAILED: ' + failures : 'ALL PASSED (grotto)');

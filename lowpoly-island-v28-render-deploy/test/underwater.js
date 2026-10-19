@@ -29,11 +29,11 @@ check('見た目だけで拾えない飾りは置かない(置いたものは全
 check('沈没船は水中の地面に置かれる', layoutA.shipwreck.y < -2.5 && layoutA.shipwreck.y > -7.5);
 check('宝箱は沈没船の近くの水中に置かれる', layoutA.treasure.underwater === true && layoutA.treasure.y < 0.15 && Math.hypot(layoutA.treasure.x - layoutA.shipwreck.x, layoutA.treasure.z - layoutA.shipwreck.z) >= 2.9 && Math.hypot(layoutA.treasure.x - layoutA.shipwreck.x, layoutA.treasure.z - layoutA.shipwreck.z) <= 4.5);
 
-// 既存の陸上宝箱3個の座標・番号は維持し、4個目に海底、5個目に灯台の頂上を追加する(既存の番号は動かさない)。
+// 既存の宝箱0〜6の座標・番号を維持し、追加野営地の宝箱2個を末尾へ追加する。
 const ruins = Shared.getRuinLocations(seed, 6);
 const oldChests = Shared.getChestLocations(seed, ruins, 3);
 const newChests = Shared.getChestLocations(seed, ruins, Shared.MAX_CHESTS);
-check('既存の陸上宝箱は座標も順番も変わらない', oldChests.length === 3 && newChests.length === 7 && newChests[3].underwater === true && newChests[4].lighthouse === true && newChests[5].camp === true && newChests[6].grotto === true && oldChests.every((c, i) => c.x === newChests[i].x && c.y === newChests[i].y && c.z === newChests[i].z && c.ry === newChests[i].ry));
+check('既存の宝箱0〜6は座標・番号を維持し、追加野営地の2箱は末尾に追加される', oldChests.length === 3 && newChests.length === 9 && newChests[3].underwater === true && newChests[4].lighthouse === true && newChests[5].camp === true && newChests[6].grotto === true && newChests[7].campIndex === 1 && newChests[8].campIndex === 2 && oldChests.every((c, i) => c.x === newChests[i].x && c.y === newChests[i].y && c.z === newChests[i].z && c.ry === newChests[i].ry));
 check('4個目の宝箱だけが沈没船のそばに追加される', newChests[3].underwater === true && newChests[3].x === layoutA.treasure.x && newChests[3].z === layoutA.treasure.z);
 
 // サーバーが採集キーの種類・距離を検証し、正しい資源だけを許可する。

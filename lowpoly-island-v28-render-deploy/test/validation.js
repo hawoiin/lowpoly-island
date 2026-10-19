@@ -18,6 +18,22 @@ sim.handle(1, { t: 'join', name: 'tester', key: 'test-key' });
 sim.handle(1, { t: 'state', x: 12, y: Shared.islandHeight(12, 10), z: 10, ry: 0, cave: -1, f: 0 });
 const c = sim.clients.get(1);
 
+// 攻撃モーション通知は位置スナップショットと独立して、攻撃ごとに中継される。
+const attackSim = new Shared.WorldSim({ seed: 12346 });
+const attackBroadcast = [];
+attackSim.out = { sendTo() {}, broadcast(msg, except) { attackBroadcast.push({ msg, except }); } };
+attackSim.addClient(11);
+attackSim.addClient(12);
+attackSim.handle(11, { t: 'join', name: 'attacker', key: 'attack-a' });
+attackSim.handle(12, { t: 'join', name: 'observer', key: 'attack-b' });
+attackBroadcast.length = 0;
+for (let i = 0; i < 5; i++) {
+  attackSim.clients.get(11).lastAttackAt = 0; // 単体テストでは独立した5回の攻撃を再現する。
+  attackSim.handle(11, { t: 'attack' });
+}
+check('攻撃モーション通知は連続した5回の攻撃を5つのイベントとして中継する',
+  attackBroadcast.filter(v => v.msg.t === 'patk' && v.msg.id === 11 && v.except === 11).length === 5);
+
 // 不正な位置で、直前に受け取った正常な状態が上書きされないことを確認する。
 sim.handle(1, { t: 'state', x: 'NaN', y: 0, z: 0, ry: 0, cave: -1, f: 0 });
 check('文字列の座標を無視してプレイヤー位置を保持する', c.x === 12 && c.z === 10);
@@ -113,7 +129,7 @@ const restored = new Shared.WorldSim({ saved: {
     { sid: 10, buildId: 'fence', x: 300, y: 1, z: 300, ry: 0 },
     null,
   ],
-  chests: [1, 2, 7, -1, '0', 2.5], // 7 は宝箱の数(0〜6)の範囲外
+  chests: [1, 2, 9, -1, '0', 2.5], // 9 は宝箱の数(0〜8)の範囲外
 } });
 check('壊れたセーブから有効な建築物だけ復元する', restored.structures.size === 1 && restored.structures.has(7));
 check('復元後の建築IDが既存IDと衝突しない', restored.nextSid > 7);

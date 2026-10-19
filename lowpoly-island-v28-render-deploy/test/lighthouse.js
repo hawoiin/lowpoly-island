@@ -155,16 +155,16 @@ for (let i = 1; i <= 30; i++) SEEDS.push((i * 2654435761) >>> 0);
   let ok = true, why = '';
   for (const seed of [1, 7, 424242]) {
     const zones = Shared.getFeatureClearZones(seed);
-    const lh = Shared.getLighthouseLocation(seed), camp = Shared.getCampLocation(seed), springs = Shared.getSpringLocations(seed, 2);
-    if (zones.length !== 1 + springs.length + 1) { ok = false; why = 'seed ' + seed + ' 円の数 ' + zones.length; }
+    const lh = Shared.getLighthouseLocation(seed), camps = Shared.getCampLocations(seed), springs = Shared.getSpringLocations(seed, 2);
+    if (zones.length !== 1 + springs.length + camps.length) { ok = false; why = 'seed ' + seed + ' 円の数 ' + zones.length; }
     const lz = zones.find(z => z.x === lh.x && z.z === lh.z);
     if (!lz || lz.r < LH.rampOut + 1.5) { ok = false; why = 'seed ' + seed + ' 灯台の円が坂をおおわない'; }
-    const cz = zones.find(z => z.x === camp.x && z.z === camp.z);
-    if (!cz || cz.r < Shared.CAMP.footR) { ok = false; why = 'seed ' + seed + ' 野営地の円が杭をおおわない'; }
+    const campZonesOk = camps.every(camp => { const z = zones.find(q => q.x === camp.x && q.z === camp.z); return !!z && z.r >= Shared.CAMP.footR; });
+    if (!campZonesOk) { ok = false; why = 'seed ' + seed + ' 野営地の円が杭をおおわない'; }
     for (const sp of springs) { const z = zones.find(q => q.x === sp.x && q.z === sp.z); if (!z || z.r < Shared.SPRING.footR + 1) { ok = false; why = 'seed ' + seed + ' 泉の円が池をおおわない'; } }
     if (JSON.stringify(zones) !== JSON.stringify(Shared.getFeatureClearZones(seed))) { ok = false; why = 'seed ' + seed + ' 毎回違う'; }
   }
-  check('灯台(坂の外縁+2m)・泉(池のふち+1.8m)・野営地(杭+1m)の円が、seedから毎回同じに決まる', ok, why);
+  check('灯台(坂の外縁+2m)・泉(池のふち+1.8m)・3か所の野営地(杭+1m)の円が、seedから毎回同じに決まる', ok, why);
 }
 
 // ---- 頂上の宝箱 ----
@@ -172,7 +172,7 @@ for (let i = 1; i <= 30; i++) SEEDS.push((i * 2654435761) >>> 0);
   const sim = new Shared.WorldSim({ seed: 7 });
   const opened = [];
   sim.out = { sendTo() {}, broadcast: m => { if (m.t === 'chestOpened') opened.push(m); } };
-  check('宝箱は7個(陸3・沈没船1・灯台1・野営地1・海底洞窟1)で、5番目が灯台の頂上', sim.chestLocations.length === 7 && sim.chestLocations[4].lighthouse === true && sim.chestLocations[3].underwater === true);
+  check('宝箱は最大9個(従来7個+追加野営地2個)で、5番目は灯台の頂上', sim.chestLocations.length === 9 && sim.chestLocations[4].lighthouse === true && sim.chestLocations[3].underwater === true);
   const L = Shared.getLighthouseLocation(7), chest = sim.chestLocations[4];
   check('灯台の宝箱は頂上の高さにあり、坂の上に乗れる(展望台の内側)',
     Math.abs(chest.y - (L.baseY + LH.height)) < 1e-6 && Math.hypot(chest.x - L.x, chest.z - L.z) > LH.rampIn && Math.hypot(chest.x - L.x, chest.z - L.z) < LH.rampOut);
@@ -189,7 +189,7 @@ for (let i = 1; i <= 30; i++) SEEDS.push((i * 2654435761) >>> 0);
 // ---- 既存のセーブ(宝箱4個まで)がそのまま読め、灯台の宝箱は未開封になる ----
 {
   const sim = new Shared.WorldSim({ saved: { layoutVersion: Shared.WORLD_LAYOUT_VERSION, seed: 7, nextSid: 1, structures: [], chests: [0, 1, 2, 3] } });
-  check('宝箱4個まで開けた古いセーブを読み込んでも、灯台の宝箱(4番)は未開封のまま', sim.chests.size === 4 && !sim.chests.has(4) && sim.chestLocations.length === 7);
+  check('宝箱4個まで開けた古いセーブを読み込んでも、灯台の宝箱(4番)は未開封のまま', sim.chests.size === 4 && !sim.chests.has(4) && sim.chestLocations.length === 9);
   const exp = sim.exportSave ? sim.exportSave() : null;
   check('保存した内容に灯台の宝箱の開封状態も含められる', !exp || Array.isArray(exp.chests));
 }

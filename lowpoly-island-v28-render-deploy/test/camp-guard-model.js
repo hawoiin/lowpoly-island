@@ -22,11 +22,11 @@ check('旧デザインの人型モデルは削除せず登録されている',
   html.includes('function makeCampRaider(info)') && /raider:makeCampRaider/.test(html.slice(html.indexOf('const ENEMY_MAKERS'), html.indexOf(';', html.indexOf('const ENEMY_MAKERS')) + 1)));
 check('新モデルは棍棒・待機/移動/攻撃/死亡モーションを持つ',
   maker.includes('clubHead') && maker.includes('g.userData.anim = (t,en,dt)') && maker.includes('en.dying') && maker.includes('const stride'));
-check('野営地の番人4体は新モデルkindを使い、旧敵のID範囲を変えない',
-  shared.ENEMY_CAMP_KINDS.length === 4 && shared.ENEMY_CAMP_KINDS.every(k => k === 'campGuard') &&
+check('野営地の番人12体は新モデルkindを使い、旧敵のID範囲を変えない',
+  shared.ENEMY_CAMP_KINDS.length === 12 && shared.ENEMY_CAMP_KINDS.every(k => k === 'campGuard') &&
   shared.ENEMY_CAMP_START === shared.ENEMY_WOLF_COUNT + shared.ENEMY_BOAR_COUNT + shared.ENEMY_LIZARD_COUNT + shared.ENEMY_CRAB_COUNT + shared.ENEMY_JELLY_COUNT + shared.ENEMY_CLASSIC_WOLF_COUNT + shared.ENEMY_CLASSIC_BOAR_COUNT);
 check('新番人の戦闘設定は既存の人型敵と共通',
   shared.ENEMY_KINDS.campGuard === shared.ENEMY_KINDS.raider && shared.BODY_RADIUS.campGuard === 0.45);
-check('タイトル画面はv44を表示する', /<div id="versionLabel"[^>]*>v44<\/div>/.test(html));
+check('タイトル画面はv45を表示する', /<div id="versionLabel"[^>]*>v45<\/div>/.test(html));
 if (failures) process.exit(1);
 console.log('Camp guard model tests passed.');

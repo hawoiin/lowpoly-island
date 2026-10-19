@@ -21,7 +21,8 @@
   const CATEGORY_IDS = ['plant', 'mineral', 'relic', 'underwater'];
   const MAX_CAVES = 2;
   const MAX_STRUCTURES = 400;
-  const MAX_CHESTS = 7; // shared.js の MAX_CHESTS と同じ値(テストで一致を確認)
+  const MAX_CHESTS = 9; // shared.js と同じ値。従来7個の後ろに追加野営地の箱2個を保持
+  const FENCE_MIN_LENGTH = 0.65, FENCE_MAX_LENGTH = 2.6; // shared.js の可変柵長さと一致
 
   function isRecord(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -100,12 +101,14 @@
           !BUILD_IDS.includes(s.buildId) || ![s.x, s.y, s.z, s.ry].every(v => typeof v === 'number' && Number.isFinite(v)) ||
           Math.hypot(s.x, s.z) > 1000 || s.y < -100 || s.y > 200 || Math.abs(s.ry) > 1000 ||
           (s.owner !== undefined && (typeof s.owner !== 'string' || s.owner.length > 64)) ||
-          (s.open !== undefined && typeof s.open !== 'boolean')) {
+          (s.open !== undefined && typeof s.open !== 'boolean') ||
+          (s.length !== undefined && (s.buildId !== 'fence' || typeof s.length !== 'number' || !Number.isFinite(s.length) || s.length < FENCE_MIN_LENGTH || s.length > FENCE_MAX_LENGTH))) {
         fail('建築物データに不正な項目があります');
       }
       ids.add(s.sid);
       maxSid = Math.max(maxSid, s.sid);
       const normalized = { sid:s.sid, buildId:s.buildId, x:s.x, y:s.y, z:s.z, ry:s.ry, owner:s.owner || '' };
+      if (s.buildId === 'fence' && Number.isFinite(s.length)) normalized.length = s.length;
       if (s.buildId === 'gate') normalized.open = s.open === true;
       structures.push(normalized);
     }

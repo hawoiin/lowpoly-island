@@ -40,7 +40,7 @@
   const MAX_BULK_PICKUP_IDS = 100; // まとめて回収する要求がWebSocketの上限を超えないようにする
   // クライアントの world builder は宝箱を最大3個配置する。番号の範囲も一致させる。
   const LAND_CHEST_COUNT = 3; // 既存の陸上宝箱は位置・番号を維持する
-  const MAX_CHESTS = 7; // 陸3個 → 沈没船1個 → 灯台の頂上1個 → 野営地1個 → 海底洞窟の奥1個(番号は追加順で、既存の番号は変えない)
+  const MAX_CHESTS = 9; // 既存7個(陸3・沈没船・灯台・野営地1・海底洞窟)を維持し、追加野営地2個を末尾へ追加
   const MAX_UNDERWATER_RESOURCES = 100; // 基本の採集ポイント48 + 追加の海藻・サンゴ・大岩32 に余裕を持たせた上限(キー検証は u0〜u99)
   const UNDERWATER_INTERACT_RADIUS = 3.8;
   const WORLD_LAYOUT_VERSION = 3; // 遺跡・宝箱の配置生成方式と遺跡選択方式
@@ -69,6 +69,9 @@
   const ENEMY_WOLF_COUNT = 10, ENEMY_BOAR_COUNT = 8; // 島の敵の数(狼が先、猪が後。id は 0 から連番)
   const ENEMY_LIZARD_COUNT = 6, ENEMY_CRAB_COUNT = 8, ENEMY_JELLY_COUNT = 8; // その後ろに 岩トカゲ・カニ・クラゲ の順
   const ENEMY_CLASSIC_WOLF_COUNT = 5, ENEMY_CLASSIC_BOAR_COUNT = 4; // さらに後ろに、初期版の見た目の狼・猪(強さと動きは狼・猪と同じ)
+  // 野営地は3か所、各4体。既存の通常敵と最初の野営地4体のIDは維持する。
+  const CAMP_SITE_COUNT = 3;
+  const CAMP_GUARDS_PER_SITE = 4;
   // 敵の種類ごとの設定。aggroR>0 の敵は近くのプレイヤーを襲う(hurt=1回の被ダメージ、reach=噛みつく距離、cd=攻撃間隔[秒])
   //  fleeBelow: HPがこの割合以下で殴られると逃げる / dormant: 近づくまで動かない(岩に擬態) / water: 水中の敵(水の上にいるプレイヤーだけを狙う)
   //  guard: 正面からの攻撃のダメージをこの値だけ減らす(カニ) / orbit: 追うとき相手の周りを回る(狼) / hold: この距離まで近づいたら止まる(クラゲ。触手の範囲より少し内側まで寄って来る) / turn: 向きを変える速さ
@@ -102,7 +105,7 @@
     Array(ENEMY_LIZARD_COUNT).fill('lizard'), Array(ENEMY_CRAB_COUNT).fill('crab'), Array(ENEMY_JELLY_COUNT).fill('jelly'),
     Array(ENEMY_CLASSIC_WOLF_COUNT).fill('wolfClassic'), Array(ENEMY_CLASSIC_BOAR_COUNT).fill('boarClassic'));
   // 野営地の見張り(さらに後ろに追加。既存の敵の id は変えない)。野営地のまわりだけを持ち場にする
-  const ENEMY_CAMP_KINDS = ['campGuard', 'campGuard', 'campGuard', 'campGuard'];
+  const ENEMY_CAMP_KINDS = Array(CAMP_SITE_COUNT * CAMP_GUARDS_PER_SITE).fill('campGuard');
   const ENEMY_CAMP_START = ENEMY_ORDER.length;
   for (const k of ENEMY_CAMP_KINDS) ENEMY_ORDER.push(k);
   const ENEMY_GROTTO_START = ENEMY_ORDER.length;
@@ -110,6 +113,7 @@
   const ENEMY_GROTTO_KINDS = ['jelly', 'jelly', 'jelly'];
   for (const k of ENEMY_GROTTO_KINDS) ENEMY_ORDER.push(k);
   const isCampEnemyId = id => Number.isInteger(id) && id >= ENEMY_CAMP_START && id < ENEMY_GROTTO_START;
+  const getCampIndexForEnemyId = id => isCampEnemyId(id) ? Math.floor((id - ENEMY_CAMP_START) / CAMP_GUARDS_PER_SITE) : -1;
   const isGrottoEnemyId = id => Number.isInteger(id) && id >= ENEMY_GROTTO_START && id < ENEMY_ORDER.length;
   const JELLY_WATER_MIN = -9.5, JELLY_WATER_MAX = -1.0; // クラゲが泳ぐ海底の高さ(地面の高さがこの範囲の場所)
   const WADE_MIN = -0.6;              // 陸の敵が入れる水の浅さ(地面の高さ)。ひざ下くらいまでは水辺へ入って追ってくる
@@ -475,7 +479,7 @@
   }
 
   // ---- 敵の野営地: 見張りの狼たちが守る小さな陣地。見張りを倒すと戦利品の箱が開けられる(seed から再現できる) ----
-  const CAMP = { footR: 7, guardR: 4.5 };
+  const CAMP = { footR: 7, guardR: 4.5, siteCount: CAMP_SITE_COUNT, guardsPerSite: CAMP_GUARDS_PER_SITE };
 
   function campSiteOk(x, z, ruins, avoid) {
     const h = islandHeight(x, z);
@@ -547,10 +551,45 @@
     return null;
   }
 
+  // 最初の野営地は旧 getCampLocation と同じ場所を維持し、追加分だけをseedから決定する。
+  // 既存セーブの宝箱番号と最初の野営地・敵IDを保ち、追加拠点は離れた平坦な陸地を優先する。
+  function getCampLocations(seed, count) {
+    count = Number.isInteger(count) ? Math.max(1, Math.min(CAMP_SITE_COUNT, count)) : CAMP_SITE_COUNT;
+    const first = getCampLocation(seed);
+    if (!first) return [];
+    const camps = [first];
+    if (count === 1) return camps;
+    const random = mulberry32(((seed >>> 0) ^ 0x7ab491e3) >>> 0);
+    const ruins = getRuinLocations(seed, 6);
+    const avoidBase = [];
+    const boss = getBossHome(seed);
+    if (boss) avoidBase.push({ x:boss.x, z:boss.z, gap:26 });
+    const lighthouse = getLighthouseLocation(seed);
+    if (lighthouse) avoidBase.push({ x:lighthouse.x, z:lighthouse.z, gap:24 });
+    for (const sp of getLegacySpringLocations(seed, 2)) avoidBase.push({ x:sp.x, z:sp.z, gap:30 });
+    for (let index = 1; index < count; index++) {
+      let placed = null;
+      // 一度の配置失敗で拠点をなくさないよう複数回試す。候補はすべてseed依存で再現できる。
+      for (let attempt = 0; attempt < 2200 && !placed; attempt++) {
+        const ang = random() * Math.PI * 2;
+        const r = 72 + random() * (WORLD_SIZE * 0.43 - 72);
+        const x = Math.round(Math.cos(ang) * r * 100) / 100;
+        const z = Math.round(Math.sin(ang) * r * 100) / 100;
+        const avoid = avoidBase.concat(camps.map(c => ({ x:c.x, z:c.z, gap:64 })));
+        if (!campSiteOk(x, z, ruins, avoid)) continue;
+        if (camps.some(c => Math.hypot(c.x - x, c.z - z) < 64)) continue;
+        placed = { x, z, y:Math.round(islandHeight(x, z) * 100) / 100, ry:random() * Math.PI * 2 };
+      }
+      if (placed) camps.push(placed);
+    }
+    return camps;
+  }
+
   // 戦利品の箱は陣地の中央の少し奥
-  function campChestSpot(C) {
+  function campChestSpot(C, campIndex) {
+    campIndex = Number.isInteger(campIndex) ? Math.max(0, campIndex) : 0;
     const x = Math.round((C.x + Math.cos(C.ry) * 1.6) * 100) / 100, z = Math.round((C.z + Math.sin(C.ry) * 1.6) * 100) / 100;
-    return { x, y: Math.round(islandHeight(x, z) * 100) / 100, z, ry: C.ry + Math.PI, camp: true };
+    return { x, y: Math.round(islandHeight(x, z) * 100) / 100, z, ry: C.ry + Math.PI, camp: true, campIndex };
   }
 
   // ---- 海底洞窟: 海底の岩でできた丸い小部屋(入口は1か所)。中にクラゲが漂い、奥に宝箱がある(seed から再現できる) ----
@@ -603,8 +642,7 @@
     const lh = getLighthouseLocation(seed);
     if (lh) zones.push({ x: lh.x, z: lh.z, r: LIGHTHOUSE.rampOut + 2 });
     for (const sp of getSpringLocations(seed, 2)) zones.push({ x: sp.x, z: sp.z, r: SPRING.footR + 1.8 });
-    const camp = getCampLocation(seed);
-    if (camp) zones.push({ x: camp.x, z: camp.z, r: CAMP.footR + 1 });
+    for (const camp of getCampLocations(seed)) zones.push({ x: camp.x, z: camp.z, r: CAMP.footR + 1 });
     return zones;
   }
 
@@ -640,13 +678,17 @@
       const lighthouse = getLighthouseLocation(seed);
       if (lighthouse) locations.push(lighthouseChestSpot(lighthouse));
     }
-    if (count > LAND_CHEST_COUNT + 2) { // 末尾: 野営地の戦利品の箱
+    if (count > LAND_CHEST_COUNT + 2) { // 既存index 5: 最初の野営地の戦利品箱
       const camp = getCampLocation(seed);
-      if (camp) locations.push(campChestSpot(camp));
+      if (camp) locations.push(campChestSpot(camp, 0));
     }
-    if (count > LAND_CHEST_COUNT + 3) { // 末尾: 海底洞窟の奥の宝箱
+    if (count > LAND_CHEST_COUNT + 3) { // 既存index 6: 海底洞窟の奥の宝箱。古いセーブとの互換性のため位置を維持
       const grotto = getGrottoLocation(seed);
       if (grotto) locations.push(grottoChestSpot(grotto));
+    }
+    if (count > LAND_CHEST_COUNT + 4) { // 追加分は既存7個の後ろへ追加し、従来の宝箱indexをずらさない
+      const camps = getCampLocations(seed);
+      for (let i = 1; i < camps.length && locations.length < count; i++) locations.push(campChestSpot(camps[i], i));
     }
     return locations;
   }
@@ -762,6 +804,76 @@
       closingLoop:true,
       closureTarget:{ x:start.x, y:start.y, z:start.z },
     };
+  }
+
+  // 連続設置の記憶が切れていても、既存柵の「開いた端」同士が1本で届くなら閉じられる。
+  // プレイヤーが隙間の中ほどを指している場合だけ働かせ、無関係な柵を勝手につながない。
+  function snapAnyFenceLoopClosure(x, y, z, structures) {
+    const list = Array.from(structures || []).filter(s => s && isFenceLike(s.buildId) &&
+      [s.x, s.y, s.z, s.ry].every(Number.isFinite));
+    if (!list.length || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+
+    // 最大長の半分 + スナップ距離より遠い端点は、今回のカーソル位置で閉じられない。
+    // 先に遠方を除外し、建築物が上限近くあっても毎フレーム全組合せを調べない。
+    const endpointSearchR = FENCE_SNAP_DISTANCE + FENCE_MAX_LENGTH * 0.5 + FENCE_JOIN_TOLERANCE + 0.02;
+    const allEndpoints = [];
+    for (const s of list) {
+      for (const p of fenceEndpoints(s)) {
+        if (Math.hypot(p.x - x, p.z - z) > endpointSearchR) continue;
+        allEndpoints.push({ x:p.x, y:s.y, z:p.z, sid:s.sid });
+      }
+    }
+    if (allEndpoints.length < 2) return null;
+
+    // 端点が接続済みかどうかは、許容誤差サイズの空間ハッシュで調べる。
+    // 従来の「各端点から全柵を走査」を避け、柵が増えても O(n²) にならないようにする。
+    const cell = FENCE_JOIN_TOLERANCE;
+    const cellKey = (ix, iz) => ix + ':' + iz;
+    const buckets = new Map();
+    for (const p of allEndpoints) {
+      p.ix = Math.floor(p.x / cell); p.iz = Math.floor(p.z / cell);
+      const key = cellKey(p.ix, p.iz);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(p);
+    }
+    const openEndpoints = [];
+    for (const p of allEndpoints) {
+      let closed = false;
+      for (let ox = -1; ox <= 1 && !closed; ox++) for (let oz = -1; oz <= 1 && !closed; oz++) {
+        const neighbors = buckets.get(cellKey(p.ix + ox, p.iz + oz)) || [];
+        for (const q of neighbors) {
+          if (q.sid === p.sid) continue;
+          if (Math.hypot(q.x - p.x, q.z - p.z) <= FENCE_JOIN_TOLERANCE) { closed = true; break; }
+        }
+      }
+      if (!closed) openEndpoints.push(p);
+    }
+    if (openEndpoints.length < 2) return null;
+
+    const candidates = [];
+    for (let i = 0; i < openEndpoints.length; i++) for (let j = i + 1; j < openEndpoints.length; j++) {
+      const a = openEndpoints[i], b = openEndpoints[j];
+      if (a.sid === b.sid || Math.abs(a.y - b.y) > 0.35) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+      if (length < FENCE_MIN_LENGTH || length > FENCE_MAX_LENGTH) continue;
+      const cx = (a.x + b.x) * 0.5, cz = (a.z + b.z) * 0.5;
+      const cursorDistance = Math.hypot(cx - x, cz - z);
+      if (cursorDistance > FENCE_SNAP_DISTANCE) continue;
+      candidates.push({ x:cx, y:(a.y + b.y) * 0.5, z:cz, ry:Math.atan2(-dz, dx), length,
+        snapped:true, closingLoop:true, closureTarget:{ x:a.x, y:a.y, z:a.z }, cursorDistance });
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => a.cursorDistance - b.cursorDistance);
+
+    // 端点近くの候補しかないため、衝突判定もカーソル周辺に絞る。
+    // 5.75m はスナップ範囲(1.25m) + 衝突確認余裕(4.5m)。地形・水域等の検査は共通関数内で引き続き行う。
+    const nearbyStructures = list.filter(s => Math.hypot(s.x - x, s.z - z) <= FENCE_SNAP_DISTANCE + 4.5);
+    for (const candidate of candidates) {
+      if (checkPlacement('fence', candidate.x, candidate.y, candidate.z, nearbyStructures, candidate.ry, candidate.length)) continue;
+      delete candidate.cursorDistance;
+      return candidate;
+    }
+    return null;
   }
 
   // 柵の見た目は Three.js の Y 回転(ワールドXZ上では +X軸が (cosθ, -sinθ) へ回る)に従う。
@@ -905,6 +1017,8 @@
     if (buildId === 'fence') {
       const closure = snapFenceLoopClosure(x, y, z, ry, list, fenceChain);
       if (closure) return closure;
+      const anyClosure = snapAnyFenceLoopClosure(x, y, z, list);
+      if (anyClosure) return anyClosure;
     }
 
     let best = null;
@@ -1156,7 +1270,8 @@
       this.underwaterLayout = getUnderwaterLayout(this.seed);
       this.underwaterResources = this.underwaterLayout.resources;
       this.chestLocations = getChestLocations(this.seed, getRuinLocations(this.seed, 6), MAX_CHESTS);
-      this.campLocation = getCampLocation(this.seed);
+      this.campLocations = getCampLocations(this.seed);
+      this.campLocation = this.campLocations[0] || getCampLocation(this.seed); // 旧コード/API互換
       this.grottoLocation = getGrottoLocation(this.seed);
       this.tickCount = 0;
       this.pickupOthers = !!opts.pickupOthers; // true なら他人の建築物も回収できる
@@ -1207,7 +1322,7 @@
           x: 0, z: 0, ry: 0, homeX: 0, homeZ: 0, tx: 0, tz: 0, retarget: 0,
           speed: cfg.speed, fleeTimer: 0, knockX: 0, knockZ: 0, attackTimer: 0, respawnAt: 0, awake: !cfg.dormant, blockedT: 0, returnT: 0,
           mv: null, mvPh: 0, mvT: 0, mvTarget: 0, mvHit: null, dirX: 0, dirZ: 0, combo: 0, circDir: 1, circT: 0, look: null,
-          camp: i >= ENEMY_CAMP_START && i < ENEMY_GROTTO_START, grotto: i >= ENEMY_GROTTO_START,
+          camp: i >= ENEMY_CAMP_START && i < ENEMY_GROTTO_START, campIndex:getCampIndexForEnemyId(i), grotto: i >= ENEMY_GROTTO_START,
         };
         this.enemies.push(en);
         this.placeEnemy(en);
@@ -1226,8 +1341,8 @@
         }
         return null;
       }
-      if (en && en.camp) { // 野営地の見張り: 陣地のまわり(中央の箱から少し離れた所)
-        const C = this.campLocation;
+      if (en && en.camp) { // 野営地の見張り: 自分の野営地のまわり(中央の箱から少し離れた所)
+        const C = this.campLocations[en.campIndex] || this.campLocation;
         if (!C) return null;
         for (let tries = 0; tries < 60; tries++) {
           const ang = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 2.2;
@@ -1600,7 +1715,7 @@
           // indexだけでは開けられない。サーバーが生成した宝箱の座標との距離も確認する。
           const chest = this.chestLocations[idx];
           if ((chest.lighthouse || chest.grotto) && Math.abs(c.y - chest.y) > 4) return; // 灯台の宝箱は頂上まで登らないと、洞窟の宝箱は水面の上からは開けられない
-          if (chest.camp && this.enemies.some(e => e.camp && e.alive)) return; // 野営地の箱は、見張りを全員倒してから
+          if (chest.camp && this.enemies.some(e => e.camp && e.campIndex === (Number.isInteger(chest.campIndex) ? chest.campIndex : 0) && e.alive)) return; // その野営地の見張りだけを倒せば開く
           if (!c.hasState || distanceXZ(c.x, c.z, chest.x, chest.z) > CHEST_INTERACT_RADIUS) return;
           this.chests.add(idx);
           this.out.broadcast({ t: 'chestOpened', idx, by: id });
@@ -2059,6 +2174,8 @@
       this.chests = candidate.chests;
       this.nextSid = candidate.nextSid;
       this.chestLocations = candidate.chestLocations;
+      this.campLocations = candidate.campLocations;
+      this.campLocation = candidate.campLocation;
       this.underwaterLayout = candidate.underwaterLayout;
       this.underwaterResources = candidate.underwaterResources;
       this.enemies = candidate.enemies;
@@ -2078,7 +2195,7 @@
     WORLD_SIZE, noise2, islandHeight, mulberry32, WorldSim, MAX_BULK_PICKUP_IDS,
     WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, springTerrainOffset, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
     FENCE_MIN_LENGTH, FENCE_MAX_LENGTH, FENCE_JOIN_TOLERANCE, fenceEndpoints, fenceEndpointJoin, fenceEndsMeet,
-    ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
+    ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, getCampIndexForEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, getCampLocations, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
     CHAT_MAX_CHARS, CHAT_INTERVAL_MS, EMOTE_COUNT, cleanChat, BODY_RADIUS, bodyPush,
     isValidCavePosition, isValidCaveTransition, MAX_PLAYER_SPEED, HIT_COOLDOWN_MS, MAX_TRACKED_TAKEN,
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,

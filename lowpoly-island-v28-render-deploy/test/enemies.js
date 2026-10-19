@@ -52,12 +52,15 @@ function run(sim, seconds) {
     const sim = makeSim(seed);
     addPlayer(sim, 1, 0, 0, 6);
     let prev = sim.enemies.map(e => [e.x, e.z]);
+    let prevAlive = sim.enemies.map(e => e.alive);
     for (let i = 0; i < 20 * 60; i++) {
       sim.tick(0.05);
       sim.enemies.forEach((en, k) => {
-        if (!en.alive) { prev[k] = [en.x, en.z]; return; }
-        maxJump = Math.max(maxJump, Math.hypot(en.x - prev[k][0], en.z - prev[k][1]));
+        if (!en.alive) { prev[k] = [en.x, en.z]; prevAlive[k] = false; return; }
+        // 新規スポーン/再出現は居場所への配置であり、通常移動のワープ判定から除外する。
+        if (prevAlive[k]) maxJump = Math.max(maxJump, Math.hypot(en.x - prev[k][0], en.z - prev[k][1]));
         prev[k] = [en.x, en.z];
+        prevAlive[k] = true;
         const h = Shared.islandHeight(en.x, en.z);
         if (!Shared.enemyCanStand(en.kind, en.x, en.z) && !Shared.enemyCanStand(en.kind, en.x + 0.5, en.z) && !Shared.enemyCanStand(en.kind, en.x - 0.5, en.z) &&
             !Shared.enemyCanStand(en.kind, en.x, en.z + 0.5) && !Shared.enemyCanStand(en.kind, en.x, en.z - 0.5)) { ok = false; why = en.kind + ' が生息域の外 h=' + h.toFixed(2); }
