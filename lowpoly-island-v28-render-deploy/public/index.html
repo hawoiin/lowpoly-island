@@ -515,7 +515,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v51</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v52</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -4011,7 +4011,8 @@ window.startGame = function(NETINIT){
     const wp = smooth01(en && en.wp);
     const stT = Math.max(0, Number.isFinite(en && en.stT) ? en.stT : 0);
     const wind = ph === 1 ? wp : 0;
-    // 攻撃phase/ダメージ時刻はサーバー側の既存設定を維持。見た目は「右肩の上に構える→前方へ振り下ろす」。
+    // サーバー側の攻撃時間・当たり判定は維持。肩の前後回転を主軸にし、
+    // 腕を頭上・前方へ構えてから、横へ大きく逃がさず前下方へ振り下ろす。
     const strike = ph === 2 ? smooth01(stT / 0.14) : 0;
     const recover = ph === 3 ? 1 - smooth01(stT / 0.8) : 0;
     const pose = {
@@ -4020,32 +4021,33 @@ window.startGame = function(NETINIT){
       torsoX:0, torsoY:0, bodyDip:0, legBrace:0, kneeBrace:0, headX:0
     };
     if (ph === 1) {
-      // 予備動作：右腕を外側から頭上へ持ち上げ、棍棒の頭を頭より高くする。
-      // 肩Zの正回転で腕を上げ、肘を曲げて武器を後ろに引く。
-      pose.rightShoulderX = -0.45*wind; pose.rightShoulderZ = 1.55*wind;
-      pose.rightElbowX = -0.20*wind; pose.rightElbowZ = 0.65*wind;
-      pose.rightHandX = -0.15*wind; pose.rightHandZ = 0.10*wind;
-      pose.leftShoulderX = 0.12*wind; pose.leftShoulderZ = 0.18*wind;
-      pose.leftElbowX = -0.15*wind; pose.leftElbowZ = 0.08*wind;
-      pose.torsoX = -0.05*wind; pose.torsoY = 0; pose.bodyDip = 0.04*wind;
-      pose.legBrace = 0.10*wind; pose.kneeBrace = 0.14*wind; pose.headX = -0.04*wind;
+      // 予備動作：肩を前後方向へ回して腕と棍棒を頭上・少し前に持ち上げる。
+      // Z回転はほぼ使わず、肘を曲げて武器を胴体の横へ振り出さない。
+      pose.rightShoulderX = -2.15*wind; pose.rightShoulderZ = 0;
+      pose.rightElbowX = -0.15*wind; pose.rightElbowZ = 0.15*wind;
+      pose.rightHandX = -0.10*wind; pose.rightHandZ = 0.08*wind;
+      pose.leftShoulderX = -0.12*wind; pose.leftShoulderZ = -0.08*wind;
+      pose.leftElbowX = -0.10*wind; pose.leftElbowZ = 0.06*wind;
+      pose.torsoX = -0.03*wind; pose.torsoY = 0; pose.bodyDip = 0.025*wind;
+      pose.legBrace = 0.06*wind; pose.kneeBrace = 0.10*wind; pose.headX = -0.03*wind;
     } else if (ph === 2) {
-      // 振り下ろし：肩・肘を頭上姿勢から下ろし、手首を返して棍棒の頭を前方かつ下へ通す。
-      pose.rightShoulderX = -0.45 - 0.10*strike; pose.rightShoulderZ = 1.55 - 1.37*strike;
-      pose.rightElbowX = -0.20 + 0.05*strike; pose.rightElbowZ = 0.65 - 0.63*strike;
-      pose.rightHandX = -0.15 + 0.25*strike; pose.rightHandZ = 0.10 - 0.10*strike;
-      pose.leftShoulderX = 0.12 - 0.08*strike; pose.leftShoulderZ = 0.18 - 0.01*strike;
-      pose.leftElbowX = -0.15 + 0.05*strike; pose.leftElbowZ = 0.08 + 0.10*strike;
-      pose.torsoX = -0.05 + 0.30*strike; pose.torsoY = 0.08*strike; pose.bodyDip = 0.04 - 0.035*strike;
-      pose.legBrace = 0.10 - 0.06*strike; pose.kneeBrace = 0.14 - 0.10*strike; pose.headX = -0.04 + 0.10*strike;
+      // 攻撃：肩を前下方へ回し、肘・手首と胴体の前傾を連動させて棍棒を振り切る。
+      // ph=2の開始姿勢は予備動作の終端と一致し、終了姿勢は回復の開始と一致する。
+      pose.rightShoulderX = -2.15 + 1.35*strike; pose.rightShoulderZ = 0;
+      pose.rightElbowX = -0.15 + 0.05*strike; pose.rightElbowZ = 0.15 - 0.10*strike;
+      pose.rightHandX = -0.10 + 0.05*strike; pose.rightHandZ = 0.08 - 0.03*strike;
+      pose.leftShoulderX = -0.12 + 0.16*strike; pose.leftShoulderZ = -0.08 + 0.25*strike;
+      pose.leftElbowX = -0.10; pose.leftElbowZ = 0.06 + 0.12*strike;
+      pose.torsoX = -0.03 + 0.38*strike; pose.torsoY = 0.08*strike; pose.bodyDip = 0.025 + 0.035*strike;
+      pose.legBrace = 0.06 - 0.02*strike; pose.kneeBrace = 0.10 - 0.06*strike; pose.headX = -0.03 + 0.09*strike;
     } else if (ph === 3) {
-      // 振り切り姿勢を攻撃終端と一致させ、武器を下げながら構えへ戻す。
-      pose.rightShoulderX = -0.55*recover; pose.rightShoulderZ = 0.18*recover;
-      pose.rightElbowX = -0.15*recover; pose.rightElbowZ = 0.02*recover;
-      pose.rightHandX = 0.10*recover; pose.rightHandZ = 0;
+      // 振り切り直後は攻撃終端と同じ姿勢。上体を起こしながら腕を前方から自然に戻す。
+      pose.rightShoulderX = -0.80*recover; pose.rightShoulderZ = 0;
+      pose.rightElbowX = -0.10*recover; pose.rightElbowZ = 0.05*recover;
+      pose.rightHandX = -0.05*recover; pose.rightHandZ = 0.05*recover;
       pose.leftShoulderX = 0.04*recover; pose.leftShoulderZ = 0.17*recover;
       pose.leftElbowX = -0.10*recover; pose.leftElbowZ = 0.18*recover;
-      pose.torsoX = 0.25*recover; pose.torsoY = 0.08*recover; pose.bodyDip = 0.005*recover;
+      pose.torsoX = 0.35*recover; pose.torsoY = 0.08*recover; pose.bodyDip = 0.06*recover;
       pose.legBrace = 0.04*recover; pose.kneeBrace = 0.04*recover; pose.headX = 0.06*recover;
     }
     return pose;
@@ -8235,7 +8237,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=51-downward-chop-perf"></script>
+<script src="shared.js?v=52-camp-guard-overhead-arc"></script>
 <script src="boot.js"></script>
 </body>
 </html>

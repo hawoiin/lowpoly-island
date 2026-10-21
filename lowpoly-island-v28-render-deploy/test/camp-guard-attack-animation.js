@@ -17,15 +17,16 @@ const finite = v => Object.values(v).every(Number.isFinite);
 const idle = pose({ph:0,wp:0,stT:0});
 const prep = pose({ph:1,wp:1,stT:0.62});
 const strike0 = pose({ph:2,wp:0,stT:0});
+const strikeMid = pose({ph:2,wp:0,stT:0.07});
 const strike = pose({ph:2,wp:0,stT:0.15});
 const recover0 = pose({ph:3,wp:0,stT:0});
 const recoverHalf = pose({ph:3,wp:0,stT:0.4});
 const recovered = pose({ph:3,wp:0,stT:0.8});
 check('全フェーズで回転値が有限', [idle,prep,strike0,strike,recover0,recoverHalf,recovered].every(finite));
-check('予備動作では右腕を頭上へ持ち上げる', prep.rightShoulderZ > 1.4 && prep.rightElbowZ > 0.5 && prep.rightHandX < 0);
-check('攻撃終端では腕を下ろし、棍棒を前下方へ向ける', strike.rightShoulderZ < 0.25 && strike.rightHandX > 0.05 && strike.rightShoulderX < -0.5);
+check('予備動作は前後方向の肩回転で棍棒を頭上へ構える', prep.rightShoulderX < -2 && Math.abs(prep.rightShoulderZ) < 1e-9 && prep.rightElbowX < -0.1 && prep.rightHandX < 0);
+check('攻撃終端では肩・肘・手首が前下方の振り切り姿勢になる', strike.rightShoulderX > -1 && strike.rightShoulderX < -0.7 && Math.abs(strike.rightShoulderZ) < 1e-9 && strike.rightHandX < 0 && strike.torsoX > 0.3);
 
-// Three.jsのEuler XYZを模した3x3回転と実モデルの階層位置計算。棍棒先端の上下/前後移動を確認する。
+// Three.jsのEuler XYZを模した3x3回転と実モデルの階層位置計算。棍棒先端の上下/前後/左右の軌道を確認する。
 const mul = (a,b) => a.map((row,i)=>row.map((_,j)=>a[i][0]*b[0][j]+a[i][1]*b[1][j]+a[i][2]*b[2][j]));
 const mv = (m,v) => m.map(row=>row[0]*v[0]+row[1]*v[1]+row[2]*v[2]);
 function Rxyz(x=0,y=0,z=0){
@@ -46,16 +47,19 @@ function clubPoint(pose, localPoint){
 }
 const prepTip=clubPoint(prep,[0,-0.46,0.055]);
 const prepHead=clubPoint(prep,[0,-0.32,0.055]);
+const strikeMidTip=clubPoint(strikeMid,[0,-0.46,0.055]);
 const strikeTip=clubPoint(strike,[0,-0.46,0.055]);
 const strikeHead=clubPoint(strike,[0,-0.32,0.055]);
-check('準備姿勢で棍棒の頭が頭部より高い位置にある', prepHead[1] > 1.35 && prepTip[1] > prepHead[1]);
-check('攻撃中に棍棒が大きく下へ移動する', prepTip[1]-strikeTip[1] > 0.9);
-check('攻撃中に棍棒が敵の正面(+Z)へ移動する', strikeTip[2]-prepTip[2] > 0.3 && strikeTip[2] > 0.35);
+check('準備姿勢で棍棒の頭が頭部より高く、体の近くに収まる', prepHead[1] > 1.55 && prepTip[1] > 1.65 && Math.abs(prepHead[0]) < 0.75);
+check('攻撃中に棍棒が大きく下へ移動する', prepTip[1]-strikeTip[1] > 1.2);
+check('振り下ろしの中盤で棍棒が前方(+Z)へ弧を描いて進む', strikeMidTip[2]-prepTip[2] > 0.3 && strikeMidTip[1] < prepTip[1]-0.5);
+check('振り切り位置も構えより前方にあり、実際に前下方へ抜ける', strikeTip[2] > prepTip[2] && strikeTip[2] > 0.5);
+check('振り下ろし中に棍棒が真横へ大きく振り出されない', Math.max(Math.abs(prepTip[0]), Math.abs(strikeMidTip[0]), Math.abs(strikeTip[0])) < 0.85);
 check('攻撃終端で棍棒の先端が頭より下にある', strikeTip[1] < strikeHead[1]-0.08);
 check('予備動作から本攻撃に姿勢が連続する', Math.abs(prep.rightShoulderZ-strike0.rightShoulderZ)<1e-9 && Math.abs(prep.rightShoulderX-strike0.rightShoulderX)<1e-9 && Math.abs(prep.rightHandX-strike0.rightHandX)<1e-9);
 check('振り切り直後から回復姿勢へ連続する', Math.abs(strike.rightShoulderZ-recover0.rightShoulderZ)<1e-9 && Math.abs(strike.rightShoulderX-recover0.rightShoulderX)<1e-9 && Math.abs(strike.rightHandX-recover0.rightHandX)<1e-9);
 check('回復後は通常姿勢へ戻る', Math.abs(recovered.rightShoulderZ)<1e-9 && Math.abs(recovered.rightShoulderX)<1e-9 && Math.abs(recovered.torsoX)<1e-9);
-check('回復中は姿勢が通常状態へ向かって戻る', Math.abs(recoverHalf.rightShoulderZ)<Math.abs(recover0.rightShoulderZ) && Math.abs(recoverHalf.rightShoulderX)<Math.abs(recover0.rightShoulderX));
+check('回復中は姿勢が通常状態へ向かって戻る', Math.abs(recoverHalf.rightShoulderX)<Math.abs(recover0.rightShoulderX) && Math.abs(recoverHalf.torsoX)<Math.abs(recover0.torsoX));
 const guardStart = html.indexOf('  function makeCampGuard(info){');
 const guardEnd = html.indexOf('  const ENEMY_MAKERS =', guardStart);
 const guard = html.slice(guardStart, guardEnd);
