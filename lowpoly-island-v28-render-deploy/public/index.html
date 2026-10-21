@@ -515,7 +515,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v54</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v55</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -4002,9 +4002,12 @@ window.startGame = function(NETINIT){
     return g;
   }
 
-  // 棍棒の保持角。手から見て下方向の柄を、待機時には少し前方(+Z)へ傾ける。
-  // 攻撃時は手首の回転でこの基準角を補正し、既存の振り下ろし軌道を保つ。
+  // 棍棒の手への取り付け角と、通常時の腕の基準姿勢。
+  // 棍棒モデルの先端は手のローカル -Y 側にあるため、腕を軽く曲げて手を前へ出し、
+  // 肩・肘の回転を合わせることで、通常時には先端が手より上の斜め前方を向くようにする。
   const CAMP_GUARD_CLUB_HOLD_TILT_X = -0.45;
+  const CAMP_GUARD_READY_SHOULDER_X = -0.65;
+  const CAMP_GUARD_READY_ELBOW_X = -1.0;
 
   // 野営地番人専用の棍棒攻撃ポーズ。プレイヤーの剣振りとは独立した予備動作→振り下ろし→戻り。
   // ここは純粋関数にし、戦闘判定やサーバーの技タイミングは変更しない。
@@ -4028,8 +4031,9 @@ window.startGame = function(NETINIT){
     if (ph === 1) {
       // 予備動作：肩を前後方向へ回して腕と棍棒を頭上・少し前に持ち上げる。
       // Z回転はほぼ使わず、肘を曲げて武器を胴体の横へ振り出さない。
-      pose.rightShoulderX = -2.15*wind; pose.rightShoulderZ = 0;
-      pose.rightElbowX = -0.15*wind; pose.rightElbowZ = 0.15*wind;
+      // 基準の待機姿勢から、武器を頭上へ構える目標角まで滑らかに移る。
+      pose.rightShoulderX = -1.45*wind; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 0.77*wind; pose.rightElbowZ = 0.15*wind;
       pose.rightHandX = -0.10*wind; pose.rightHandZ = 0.08*wind;
       pose.leftShoulderX = -0.12*wind; pose.leftShoulderZ = -0.08*wind;
       pose.leftElbowX = -0.10*wind; pose.leftElbowZ = 0.06*wind;
@@ -4038,8 +4042,8 @@ window.startGame = function(NETINIT){
     } else if (ph === 2) {
       // 攻撃：肩を前下方へ回し、肘・手首と胴体の前傾を連動させて棍棒を振り切る。
       // ph=2の開始姿勢は予備動作の終端と一致し、終了姿勢は回復の開始と一致する。
-      pose.rightShoulderX = -2.15 + 1.35*strike; pose.rightShoulderZ = 0;
-      pose.rightElbowX = -0.15 + 0.05*strike; pose.rightElbowZ = 0.15 - 0.10*strike;
+      pose.rightShoulderX = -1.45 + 1.35*strike; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 0.77 + 0.05*strike; pose.rightElbowZ = 0.15 - 0.10*strike;
       pose.rightHandX = -0.10 + 0.05*strike; pose.rightHandZ = 0.08 - 0.03*strike;
       pose.leftShoulderX = -0.12 + 0.16*strike; pose.leftShoulderZ = -0.08 + 0.25*strike;
       pose.leftElbowX = -0.10; pose.leftElbowZ = 0.06 + 0.12*strike;
@@ -4047,8 +4051,8 @@ window.startGame = function(NETINIT){
       pose.legBrace = 0.06 - 0.02*strike; pose.kneeBrace = 0.10 - 0.06*strike; pose.headX = -0.03 + 0.09*strike;
     } else if (ph === 3) {
       // 振り切り直後は攻撃終端と同じ姿勢。上体を起こしながら腕を前方から自然に戻す。
-      pose.rightShoulderX = -0.80*recover; pose.rightShoulderZ = 0;
-      pose.rightElbowX = -0.10*recover; pose.rightElbowZ = 0.05*recover;
+      pose.rightShoulderX = -0.10*recover; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 0.82*recover; pose.rightElbowZ = 0.05*recover;
       pose.rightHandX = -0.05*recover; pose.rightHandZ = 0.05*recover;
       pose.leftShoulderX = 0.04*recover; pose.leftShoulderZ = 0.17*recover;
       pose.leftElbowX = -0.10*recover; pose.leftElbowZ = 0.18*recover;
@@ -4170,9 +4174,9 @@ window.startGame = function(NETINIT){
       set(arms[-1].shoulder.rotation,'z',-0.05 + pose.leftShoulderZ);
       set(arms[-1].elbow.rotation,'x',-0.08 + pose.leftElbowX);
       set(arms[-1].elbow.rotation,'z',pose.leftElbowZ);
-      set(arms[1].shoulder.rotation,'x',0.05 - stride*0.16 + pose.rightShoulderX + flinch*0.45);
+      set(arms[1].shoulder.rotation,'x',CAMP_GUARD_READY_SHOULDER_X - stride*0.16 + pose.rightShoulderX + flinch*0.45);
       set(arms[1].shoulder.rotation,'z',0.06 + pose.rightShoulderZ);
-      set(arms[1].elbow.rotation,'x',-0.08 + pose.rightElbowX);
+      set(arms[1].elbow.rotation,'x',CAMP_GUARD_READY_ELBOW_X + pose.rightElbowX);
       set(arms[1].elbow.rotation,'z',pose.rightElbowZ);
       set(arms[1].hand.rotation,'x',pose.rightHandX);
       set(arms[1].hand.rotation,'z',pose.rightHandZ);
@@ -8248,7 +8252,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=54-camp-guard-club-orientation"></script>
+<script src="shared.js?v=55-guard-weapon-hold"></script>
 <script src="boot.js"></script>
 </body>
 </html>
