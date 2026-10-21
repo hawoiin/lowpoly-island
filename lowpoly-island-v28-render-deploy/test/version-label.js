@@ -8,10 +8,10 @@ if (!style) throw new Error('title-screen version label CSS is missing');
 if (!/right\s*:\s*18px/.test(style[1]) || !/bottom\s*:\s*14px/.test(style[1])) {
   throw new Error('version label must be positioned at the bottom-right');
 }
-if (!/<div id="versionLabel"[^>]*>v52<\/div>/.test(html)) {
-  throw new Error('version label must display v52');
+if (!/<div id="versionLabel"[^>]*>v54<\/div>/.test(html)) {
+  throw new Error('version label must display v54');
 }
 if (!/<div id="startOverlay">[\s\S]*?<div id="versionLabel"/.test(html)) {
   throw new Error('version label must be inside the title overlay');
 }
-console.log('PASS title screen shows v52 at bottom-right');
+console.log('PASS title screen shows v54 at bottom-right');

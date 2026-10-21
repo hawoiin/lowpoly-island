@@ -515,7 +515,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v52</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v54</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -4002,6 +4002,10 @@ window.startGame = function(NETINIT){
     return g;
   }
 
+  // 棍棒の保持角。手から見て下方向の柄を、待機時には少し前方(+Z)へ傾ける。
+  // 攻撃時は手首の回転でこの基準角を補正し、既存の振り下ろし軌道を保つ。
+  const CAMP_GUARD_CLUB_HOLD_TILT_X = -0.45;
+
   // 野営地番人専用の棍棒攻撃ポーズ。プレイヤーの剣振りとは独立した予備動作→振り下ろし→戻り。
   // ここは純粋関数にし、戦闘判定やサーバーの技タイミングは変更しない。
   function campGuardAttackPose(en){
@@ -4015,6 +4019,7 @@ window.startGame = function(NETINIT){
     // 腕を頭上・前方へ構えてから、横へ大きく逃がさず前下方へ振り下ろす。
     const strike = ph === 2 ? smooth01(stT / 0.14) : 0;
     const recover = ph === 3 ? 1 - smooth01(stT / 0.8) : 0;
+    const clubTiltCompensation = -CAMP_GUARD_CLUB_HOLD_TILT_X * (ph === 1 ? wind : ph === 2 ? 1 : ph === 3 ? recover : 0);
     const pose = {
       rightShoulderX:0, rightShoulderZ:0, rightElbowX:0, rightElbowZ:0, rightHandX:0, rightHandZ:0,
       leftShoulderX:0, leftShoulderZ:0, leftElbowX:0, leftElbowZ:0,
@@ -4050,6 +4055,8 @@ window.startGame = function(NETINIT){
       pose.torsoX = 0.35*recover; pose.torsoY = 0.08*recover; pose.bodyDip = 0.06*recover;
       pose.legBrace = 0.04*recover; pose.kneeBrace = 0.04*recover; pose.headX = 0.06*recover;
     }
+    // 武器の待機角を攻撃中だけ手首で相殺し、予備動作・振り下ろし・回復の連続性を保つ。
+    pose.rightHandX += clubTiltCompensation;
     return pose;
   }
 
@@ -4099,9 +4106,13 @@ window.startGame = function(NETINIT){
       const hand = new THREE.Group(); hand.position.set(0,-0.23,0.035); elbow.add(hand);
       part(hand, box(0.15,0.13,0.16), skin, 0,0,0.01,true);
       if (sx > 0){
-        // 棍棒は少ないプリミティブで表現。武器の当たり判定は既存のサーバー処理を利用。
-        part(hand, box(0.055,0.31,0.055), wood, 0,-0.16,0.055,true);
-        const clubHead = part(hand, new THREE.DodecahedronGeometry(0.09,0), woodDark, 0,-0.32,0.055,true);
+        // 武器自体の保持角を先に設定。手の位置は変えず、柄と太い先端を一体で斜め前方へ向ける。
+        const club = new THREE.Group();
+        club.position.set(0,0,0.055);
+        club.rotation.x = CAMP_GUARD_CLUB_HOLD_TILT_X;
+        hand.add(club);
+        part(club, box(0.055,0.31,0.055), wood, 0,-0.16,0,true);
+        const clubHead = part(club, new THREE.DodecahedronGeometry(0.09,0), woodDark, 0,-0.32,0,true);
         clubHead.scale.set(1.0,1.18,1.0);
       }
       arms[sx] = { shoulder, elbow, hand };
@@ -8237,7 +8248,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=52-camp-guard-overhead-arc"></script>
+<script src="shared.js?v=54-camp-guard-club-orientation"></script>
 <script src="boot.js"></script>
 </body>
 </html>
