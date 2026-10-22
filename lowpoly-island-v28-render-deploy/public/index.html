@@ -515,7 +515,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v55</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v57</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -4002,15 +4002,19 @@ window.startGame = function(NETINIT){
     return g;
   }
 
-  // 棍棒の手への取り付け角と、通常時の腕の基準姿勢。
-  // 棍棒モデルの先端は手のローカル -Y 側にあるため、腕を軽く曲げて手を前へ出し、
-  // 肩・肘の回転を合わせることで、通常時には先端が手より上の斜め前方を向くようにする。
-  const CAMP_GUARD_CLUB_HOLD_TILT_X = -0.45;
-  const CAMP_GUARD_READY_SHOULDER_X = -0.65;
-  const CAMP_GUARD_READY_ELBOW_X = -1.0;
+  // 番人の武器保持姿勢は、手首と武器の接続点を共通の基準にする。
+  // 棍棒の長軸はモデルローカル -Y（握りから太い先端へ向かう方向）。
+  // ZをPI回転させて先端を手の上側へ向け、肘の前方屈曲(-1.3)を手首(+1.3)で
+  // 相殺する。角度の補正を攻撃側で重ねず、武器の取り付けと腕の姿勢を分離する。
+  const CAMP_GUARD_CLUB_GRIP_ROTATION_Z = Math.PI;
+  const CAMP_GUARD_CLUB_GRIP_OFFSET_Z = 0.055;
+  const CAMP_GUARD_READY_SHOULDER_X = 0.0;
+  const CAMP_GUARD_READY_ELBOW_X = -1.3;
+  const CAMP_GUARD_READY_HAND_X = 1.3;
 
-  // 野営地番人専用の棍棒攻撃ポーズ。プレイヤーの剣振りとは独立した予備動作→振り下ろし→戻り。
-  // ここは純粋関数にし、戦闘判定やサーバーの技タイミングは変更しない。
+  // 番人専用の攻撃目標姿勢（腕の回転値は基準姿勢からの差分）。
+  // 待機→頭上へ構える→前下方に振り切る→待機へ戻る各境界の値を一致させる。
+  // 敵AI、攻撃タイミング、ダメージ、当たり判定には依存しない純粋関数。
   function campGuardAttackPose(en){
     const clamp01 = v => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
     const smooth01 = v => { const x = clamp01(v); return x*x*(3-2*x); };
@@ -4018,49 +4022,41 @@ window.startGame = function(NETINIT){
     const wp = smooth01(en && en.wp);
     const stT = Math.max(0, Number.isFinite(en && en.stT) ? en.stT : 0);
     const wind = ph === 1 ? wp : 0;
-    // サーバー側の攻撃時間・当たり判定は維持。肩の前後回転を主軸にし、
-    // 腕を頭上・前方へ構えてから、横へ大きく逃がさず前下方へ振り下ろす。
     const strike = ph === 2 ? smooth01(stT / 0.14) : 0;
     const recover = ph === 3 ? 1 - smooth01(stT / 0.8) : 0;
-    const clubTiltCompensation = -CAMP_GUARD_CLUB_HOLD_TILT_X * (ph === 1 ? wind : ph === 2 ? 1 : ph === 3 ? recover : 0);
     const pose = {
       rightShoulderX:0, rightShoulderZ:0, rightElbowX:0, rightElbowZ:0, rightHandX:0, rightHandZ:0,
       leftShoulderX:0, leftShoulderZ:0, leftElbowX:0, leftElbowZ:0,
       torsoX:0, torsoY:0, bodyDip:0, legBrace:0, kneeBrace:0, headX:0
     };
     if (ph === 1) {
-      // 予備動作：肩を前後方向へ回して腕と棍棒を頭上・少し前に持ち上げる。
-      // Z回転はほぼ使わず、肘を曲げて武器を胴体の横へ振り出さない。
-      // 基準の待機姿勢から、武器を頭上へ構える目標角まで滑らかに移る。
-      pose.rightShoulderX = -1.45*wind; pose.rightShoulderZ = 0;
-      pose.rightElbowX = 0.77*wind; pose.rightElbowZ = 0.15*wind;
-      pose.rightHandX = -0.10*wind; pose.rightHandZ = 0.08*wind;
+      // 準備：腕を持ち上げ、手首をわずかに返して棍棒の頭を頭上・後方へ運ぶ。
+      pose.rightShoulderX = -2.10*wind; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 1.07*wind; pose.rightElbowZ = 0.15*wind;
+      pose.rightHandX = 0.40*wind; pose.rightHandZ = 0.08*wind;
       pose.leftShoulderX = -0.12*wind; pose.leftShoulderZ = -0.08*wind;
       pose.leftElbowX = -0.10*wind; pose.leftElbowZ = 0.06*wind;
       pose.torsoX = -0.03*wind; pose.torsoY = 0; pose.bodyDip = 0.025*wind;
       pose.legBrace = 0.06*wind; pose.kneeBrace = 0.10*wind; pose.headX = -0.03*wind;
     } else if (ph === 2) {
-      // 攻撃：肩を前下方へ回し、肘・手首と胴体の前傾を連動させて棍棒を振り切る。
-      // ph=2の開始姿勢は予備動作の終端と一致し、終了姿勢は回復の開始と一致する。
-      pose.rightShoulderX = -1.45 + 1.35*strike; pose.rightShoulderZ = 0;
-      pose.rightElbowX = 0.77 + 0.05*strike; pose.rightElbowZ = 0.15 - 0.10*strike;
-      pose.rightHandX = -0.10 + 0.05*strike; pose.rightHandZ = 0.08 - 0.03*strike;
+      // 振り下ろし：肩が前へ回り、手首も連動して棍棒の頭が上から前下方へ抜ける。
+      pose.rightShoulderX = -2.10 + 1.35*strike; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 1.07 + 0.05*strike; pose.rightElbowZ = 0.15 - 0.10*strike;
+      pose.rightHandX = 0.40 + 1.33*strike; pose.rightHandZ = 0.08 - 0.03*strike;
       pose.leftShoulderX = -0.12 + 0.16*strike; pose.leftShoulderZ = -0.08 + 0.25*strike;
       pose.leftElbowX = -0.10; pose.leftElbowZ = 0.06 + 0.12*strike;
       pose.torsoX = -0.03 + 0.38*strike; pose.torsoY = 0.08*strike; pose.bodyDip = 0.025 + 0.035*strike;
       pose.legBrace = 0.06 - 0.02*strike; pose.kneeBrace = 0.10 - 0.06*strike; pose.headX = -0.03 + 0.09*strike;
     } else if (ph === 3) {
-      // 振り切り直後は攻撃終端と同じ姿勢。上体を起こしながら腕を前方から自然に戻す。
-      pose.rightShoulderX = -0.10*recover; pose.rightShoulderZ = 0;
-      pose.rightElbowX = 0.82*recover; pose.rightElbowZ = 0.05*recover;
-      pose.rightHandX = -0.05*recover; pose.rightHandZ = 0.05*recover;
+      // 回復の開始値は振り切りの終端と一致し、そこから基準姿勢へ戻す。
+      pose.rightShoulderX = -0.75*recover; pose.rightShoulderZ = 0;
+      pose.rightElbowX = 1.12*recover; pose.rightElbowZ = 0.05*recover;
+      pose.rightHandX = 1.73*recover; pose.rightHandZ = 0.05*recover;
       pose.leftShoulderX = 0.04*recover; pose.leftShoulderZ = 0.17*recover;
       pose.leftElbowX = -0.10*recover; pose.leftElbowZ = 0.18*recover;
       pose.torsoX = 0.35*recover; pose.torsoY = 0.08*recover; pose.bodyDip = 0.06*recover;
       pose.legBrace = 0.04*recover; pose.kneeBrace = 0.04*recover; pose.headX = 0.06*recover;
     }
-    // 武器の待機角を攻撃中だけ手首で相殺し、予備動作・振り下ろし・回復の連続性を保つ。
-    pose.rightHandX += clubTiltCompensation;
     return pose;
   }
 
@@ -4100,7 +4096,7 @@ window.startGame = function(NETINIT){
     part(head, box(0.055,0.06,0.04), skin, 0,-0.035,0.255,false); // 小さな鼻
     part(head, box(0.10,0.018,0.018), eye, 0,-0.105,0.242,false); // 口
 
-    // 腕はプレイヤーと同じ肩位置・太さ。肘は短い箱型の関節として分け、攻撃時のみ棍棒を振る。
+    // 腕はプレイヤーと同じ肩位置・太さ。待機時は前腕を胸の前へ曲げ、棍棒を上・横方向に見せる。
     const arms = {};
     for (const sx of [-1,1]){
       const shoulder = new THREE.Group(); shoulder.position.set(sx*0.47,0.56,0); torso.add(shoulder);
@@ -4110,14 +4106,21 @@ window.startGame = function(NETINIT){
       const hand = new THREE.Group(); hand.position.set(0,-0.23,0.035); elbow.add(hand);
       part(hand, box(0.15,0.13,0.16), skin, 0,0,0.01,true);
       if (sx > 0){
-        // 武器自体の保持角を先に設定。手の位置は変えず、柄と太い先端を一体で斜め前方へ向ける。
+        // 柄の基端を手のひら付近に置き、モデルの長軸(-Y)を手の上(+Y)へ向ける。
+        // 横向きの棍棒角を腕の回転で補う方式は使わず、自然な握りの基準をここに一度だけ定義する。
         const club = new THREE.Group();
-        club.position.set(0,0,0.055);
-        club.rotation.x = CAMP_GUARD_CLUB_HOLD_TILT_X;
+        club.position.set(0,0,CAMP_GUARD_CLUB_GRIP_OFFSET_Z);
+        club.rotation.set(0, 0, CAMP_GUARD_CLUB_GRIP_ROTATION_Z);
         hand.add(club);
         part(club, box(0.055,0.31,0.055), wood, 0,-0.16,0,true);
         const clubHead = part(club, new THREE.DodecahedronGeometry(0.09,0), woodDark, 0,-0.32,0,true);
         clubHead.scale.set(1.0,1.18,1.0);
+        // 指を追加し、柄が手の中を通っていることが正面から読み取れるようにする。
+        // 指は手グループに属するため、移動・攻撃・死亡モーションと一緒に動く。
+        part(hand, box(0.04,0.032,0.028), skin, -0.04,-0.006,0.086,false);
+        part(hand, box(0.04,0.032,0.028), skin,  0.00,-0.026,0.086,false);
+        part(hand, box(0.04,0.032,0.028), skin,  0.04,-0.046,0.083,false);
+        part(hand, box(0.032,0.060,0.032), skin, -0.060,0.006,0.078,false); // 親指
       }
       arms[sx] = { shoulder, elbow, hand };
     }
@@ -4161,7 +4164,7 @@ window.startGame = function(NETINIT){
       g.userData.gaitPhase = (g.userData.gaitPhase || 0) + dt*(4.0 + speed*2.2);
       const stride = Math.sin(g.userData.gaitPhase)*moving;
       const flinch = Math.max(0,Math.min(1,(en.hitFlash || 0)/0.25));
-      // 攻撃前は後ろへ構え、振る瞬間に重心を前へ移す。通常時の呼吸・歩行は従来のまま。
+      // 攻撃前は後ろへ構え、振る瞬間に重心を前へ移す。待機時は前腕が体の前に張り出しすぎない基準角にする。
       set(torso.rotation,'x',0.012*Math.sin(t*1.8) + moving*Math.sin(g.userData.gaitPhase*2)*0.018 + pose.torsoX + flinch*0.09);
       set(torso.rotation,'y',pose.torsoY + flinch*0.035);
       set(torso.rotation,'z',Math.sin(t*1.25)*0.012 + flinch*0.12);
@@ -4178,7 +4181,7 @@ window.startGame = function(NETINIT){
       set(arms[1].shoulder.rotation,'z',0.06 + pose.rightShoulderZ);
       set(arms[1].elbow.rotation,'x',CAMP_GUARD_READY_ELBOW_X + pose.rightElbowX);
       set(arms[1].elbow.rotation,'z',pose.rightElbowZ);
-      set(arms[1].hand.rotation,'x',pose.rightHandX);
+      set(arms[1].hand.rotation,'x',CAMP_GUARD_READY_HAND_X + pose.rightHandX);
       set(arms[1].hand.rotation,'z',pose.rightHandZ);
       set(head.rotation,'x',0.015*Math.sin(t*1.8) + pose.headX + flinch*0.04);
       set(head.rotation,'y',Math.sin(t*0.65+(en.id||0))*0.035 - pose.torsoY*0.25);
@@ -8252,7 +8255,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=55-guard-weapon-hold"></script>
+<script src="shared.js?v=57-guard-grip-pose"></script>
 <script src="boot.js"></script>
 </body>
 </html>
