@@ -7321,7 +7321,7 @@ window.startGame = function(NETINIT){
       }
       const ex=caves[inCaveIndex].exitLocal;
       const exitD=Math.hypot(ex.x-player.position.x,ex.z-player.position.z);
-      if(exitD<nearestD){nearestD=exitD;nearest={kind:rogueReturn};}
+      if(exitD<nearestD){nearestD=exitD;nearest={kind:'rogueReturn'};}
       const altar=caves[inCaveIndex].interiorScene.userData.rogueAltar;
       const altarD=Math.hypot(altar.x-player.position.x,altar.z-player.position.z);
       if(altarD<nearestD){nearestD=altarD;nearest={kind:'rogueUpgrade'};}
