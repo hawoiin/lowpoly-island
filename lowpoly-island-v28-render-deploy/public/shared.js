@@ -163,9 +163,10 @@
   const CAVE_SITES = [
     { x: 160,  z: -70,  dirX: 0,  dirZ: 1 },
     { x: -150, z: -195, dirX: -1, dirZ: 0 },
-    // v58: 島に新設したローグライト専用の古代門。サーバー上も独立した洞窟インデックスとして検証する。
-    { x: 24, z: -30, dirX: 0, dirZ: 1 },
+    // v60: 洞窟とは別系統の、上下層と分岐を備えた深層ローグライク遺跡入口。
+    { x: -68, z: 145, dirX: 0, dirZ: 1, rogue: true },
   ];
+  const ROGUE_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogue === true);
   // 洞窟の外観が占める範囲(ローカル座標: 左右±halfW、奥行き z0〜z1。+z が山の奥行き方向)
   const CAVE_AREA = { halfW: 13, z0: -7, z1: 26 };
 
@@ -1230,7 +1231,12 @@
   }
 
   function isValidCavePosition(cave, x, z) {
-    return cave < 0 || Math.hypot(x, z) <= CAVE_ROOM_RADIUS + CAVE_POSITION_TOLERANCE;
+    if (cave < 0) return true;
+    if (cave === ROGUE_DUNGEON_INDEX) {
+      // 広い分岐型ダンジョン用の粗いサーバー境界。細かな通路とゲートはクライアント側でも制約する。
+      return Math.abs(x) <= 105 + CAVE_POSITION_TOLERANCE && z >= -226 - CAVE_POSITION_TOLERANCE && z <= 27 + CAVE_POSITION_TOLERANCE;
+    }
+    return Math.hypot(x, z) <= CAVE_ROOM_RADIUS + CAVE_POSITION_TOLERANCE;
   }
 
   // 洞窟の出入りはワールド座標と室内ローカル座標が切り替わるため、速度判定とは別に入口位置を検証する。
@@ -2203,7 +2209,7 @@
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
-    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT,
+    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX,
     getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
   };
 });

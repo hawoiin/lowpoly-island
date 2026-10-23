@@ -505,63 +505,35 @@
     box-shadow:0 4px 18px rgba(0,0,0,.25);
   }
   #performanceHud[hidden] { display:none; }
-  #rogueStatus {
-    position:fixed; z-index:42; top:14px; left:50%; transform:translateX(-50%);
-    min-width:220px; max-width:min(92vw,460px); box-sizing:border-box;
-    padding:9px 14px; border:1px solid rgba(138,210,220,.42); border-radius:8px;
-    background:rgba(5,10,17,.82); color:#e6f4f2; text-align:center;
-    font:600 13px/1.5 system-ui,sans-serif; letter-spacing:.04em; pointer-events:none;
-    box-shadow:0 4px 18px rgba(0,0,0,.22);
+
+  /* ---- v60 StarBreak風・深層探索ダンジョン ---- */
+  #rogueHud {
+    display:none; position:fixed; top:58px; left:50%; transform:translateX(-50%); z-index:16;
+    max-width:min(92vw,650px); box-sizing:border-box; padding:9px 15px;
+    color:#e6e8e8; background:rgba(8,12,19,.82); border:1px solid rgba(140,190,205,.42);
+    border-radius:8px; font:12px/1.5 ui-monospace,Consolas,monospace; text-align:center;
+    text-shadow:0 1px 2px #000; pointer-events:none; white-space:normal;
   }
-  #rogueStatus[hidden], #rogueBossHud[hidden], #rogueModal[hidden] { display:none; }
-  #rogueBossHud {
-    position:fixed; z-index:43; top:62px; left:50%; transform:translateX(-50%);
-    width:min(420px,88vw); box-sizing:border-box; padding:8px 12px;
-    border:1px solid rgba(225,174,145,.42); border-radius:8px;
-    background:rgba(12,7,8,.84); color:#f7e8df; pointer-events:none;
+  #rogueHud.show { display:block; }
+  #rogueHud strong { color:#8ce7eb; letter-spacing:.08em; }
+  #rogueHud .sub { opacity:.8; }
+  #rogueMetaPanel {
+    display:none; position:fixed; inset:0; z-index:55; align-items:center; justify-content:center;
+    padding:18px; box-sizing:border-box; background:rgba(3,7,12,.78); color:#e9e4d8;
   }
-  #rogueBossName { font-size:12px; letter-spacing:.12em; margin-bottom:4px; text-align:center; }
-  #rogueBossBg { height:10px; border-radius:5px; overflow:hidden; background:rgba(0,0,0,.55); }
-  #rogueBossFill { width:100%; height:100%; background:linear-gradient(90deg,#e9a17e,#9c3c37); transition:width .14s linear; }
-  #rogueModal {
-    position:fixed; z-index:10020; inset:0; display:flex; align-items:center; justify-content:center;
-    padding:16px; box-sizing:border-box; background:rgba(4,7,12,.82); backdrop-filter:blur(4px);
+  #rogueMetaPanel.show { display:flex; }
+  #rogueMetaPanel .panel {
+    width:min(92vw,390px); padding:22px; box-sizing:border-box; border-radius:12px;
+    border:1px solid rgba(123,207,210,.55); background:linear-gradient(145deg,rgba(24,33,42,.98),rgba(11,17,25,.98));
+    box-shadow:0 18px 60px rgba(0,0,0,.45);
   }
-  #rogueModalPanel {
-    width:min(760px,96vw); max-height:min(88vh,820px); overflow:auto; box-sizing:border-box;
-    padding:clamp(18px,4vw,30px); border:1px solid rgba(145,203,203,.44); border-radius:14px;
-    background:linear-gradient(150deg,rgba(25,39,45,.98),rgba(9,14,22,.99)); color:#e9f0ec;
-    box-shadow:0 22px 90px rgba(0,0,0,.55); font-family:system-ui,sans-serif;
-  }
-  #rogueModal h2 { margin:0 0 8px; font-size:clamp(20px,4vw,28px); letter-spacing:.08em; }
-  #rogueModal p { margin:8px 0 16px; color:#b7c7c4; font-size:13px; line-height:1.7; }
-  #rogueModal .rogueMetaLine { color:#9ddbd1; font-weight:700; margin:8px 0 15px; }
-  #rogueModal .rogueCardGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin:14px 0; }
-  #rogueModal .rogueCard {
-    display:flex; flex-direction:column; gap:7px; min-height:112px; text-align:left; padding:13px;
-    border:1px solid rgba(155,190,190,.32); border-radius:10px; color:#edf3ee;
-    background:rgba(43,61,64,.62); cursor:pointer; font:inherit;
-  }
-  #rogueModal .rogueCard:hover:not(:disabled) { border-color:#87d9ce; background:rgba(56,83,82,.82); }
-  #rogueModal .rogueCard strong { font-size:14px; color:#d3f4e9; }
-  #rogueModal .rogueCard span { font-size:12px; line-height:1.6; color:#b9c9c8; }
-  #rogueModal .rogueCard small { margin-top:auto; color:#e9c58f; font-size:11px; }
-  #rogueModal .rogueCard:disabled { opacity:.42; cursor:default; }
-  #rogueModal .rogueActions { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
-  #rogueModal .rogueActionBtn {
-    border:1px solid rgba(154,210,203,.4); border-radius:8px; padding:11px 16px;
-    background:#477f79; color:#fff; font:600 13px system-ui,sans-serif; cursor:pointer;
-  }
-  #rogueModal .rogueActionBtn.secondary { background:rgba(47,59,65,.8); }
-  #rogueModal .rogueActionBtn:disabled { opacity:.4; cursor:default; }
-  @media(max-width:600px){
-    #rogueStatus { top:8px; font-size:12px; min-width:0; width:max-content; max-width:94vw; }
-    #rogueBossHud { top:50px; }
-    #rogueModal { padding:8px; }
-    #rogueModalPanel { max-height:92vh; padding:16px; }
-    #rogueModal .rogueCardGrid { grid-template-columns:1fr; }
-    #rogueModal .rogueCard { min-height:84px; }
-  }
+  #rogueMetaPanel h2 { margin:0 0 8px; font-size:21px; }
+  #rogueMetaPanel p { color:#bac9cc; font-size:13px; line-height:1.6; }
+  #rogueMetaPanel .metaBalance { color:#8ce7eb; font-weight:800; margin:12px 0; }
+  #rogueMetaPanel button { display:block; width:100%; margin-top:9px; padding:12px; border-radius:8px; border:1px solid #58777d; background:#243d45; color:#f2f4ef; font-weight:700; cursor:pointer; }
+  #rogueMetaPanel button:disabled { opacity:.4; cursor:default; }
+  #rogueMetaPanel #rogueMetaClose { background:transparent; border-color:rgba(255,255,255,.2); }
+
 </style>
 </head>
 <body>
@@ -572,16 +544,12 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v58</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v60</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
 <div id="bossBar"><div id="bossBarName"></div><div id="bossBarBg"><div id="bossBarFill"></div></div></div>
-<div id="rogueStatus" hidden aria-live="polite"></div>
-<div id="rogueBossHud" hidden aria-live="polite"><div id="rogueBossName">深淵の守護者</div><div id="rogueBossBg"><div id="rogueBossFill"></div></div></div>
-<div id="rogueModal" hidden role="dialog" aria-modal="true" aria-labelledby="rogueModalTitle">
-  <div id="rogueModalPanel"><div id="rogueModalContent"></div></div>
-</div>
+<div id="rogueHud" aria-live="polite"></div>
 <div id="playerHpWrap">
   <div id="playerHpBarBg"><div id="playerHpBarFill"></div></div>
 </div>
@@ -607,7 +575,18 @@
 
 <div id="deathOverlay">
   <h1>倒れた…</h1>
+  <p id="deathSummary">もう一度、島で目を覚ます。</p>
   <button id="respawnBtn">目を覚ます</button>
+</div>
+<div id="rogueMetaPanel" role="dialog" aria-modal="true" aria-labelledby="rogueMetaTitle">
+  <div class="panel">
+    <h2 id="rogueMetaTitle">遺跡の祭壇</h2>
+    <p>生還して持ち帰った欠片を使い、次の挑戦に備える。強化は死亡しても失われない。</p>
+    <div class="metaBalance" id="rogueMetaBalance">欠片 0</div>
+    <button id="rogueBuyAttack">攻撃力を恒久強化</button>
+    <button id="rogueBuyArmor">防御力を恒久強化</button>
+    <button id="rogueMetaClose">閉じる</button>
+  </div>
 </div>
 
 
@@ -1062,8 +1041,6 @@ window.startGame = function(NETINIT){
 
   // ============ 洞窟の内部 ============
   const CAVE_ROOM_R = 13.5;     // 歩ける範囲(中心からの半径)。壁・飾りはその外側に置く
-  const ROGUE_DUNGEON_CAVE_INDEX = 2; // 既存の洞窟2か所とは独立したローグライト専用区画
-  const ROGUE_META_STORAGE_KEY = 'lowpoly-island-rogue-meta-v1';
   const CAVE_SHELL_R = 22, CAVE_SHELL_CY = 3, CAVE_SHELL_RY = 12; // 岩の外殻(横半径・中心の高さ・縦の半径)
   const caveAnims = [];         // 内部の動き(ライトのゆらぎ・出口の脈動)。updateCaveFlames から呼ぶ
 
@@ -1336,6 +1313,27 @@ window.startGame = function(NETINIT){
 
   function buildCaveExterior(e, ey){
     const rotY = Math.atan2(e.dirX, e.dirZ);
+    if(e.rogue){
+      const group=new THREE.Group(); group.position.set(e.x,ey,e.z); group.rotation.y=rotY;
+      const stone=new THREE.MeshStandardMaterial({color:0x565e63,flatShading:true,roughness:1});
+      const dark=new THREE.MeshStandardMaterial({color:0x2b333b,flatShading:true,roughness:1});
+      const portalMat=new THREE.MeshBasicMaterial({color:0x65dce7,transparent:true,opacity:.48,side:THREE.DoubleSide,depthWrite:false});
+      const plinth=new THREE.Mesh(new THREE.BoxGeometry(12,.55,9),dark); plinth.position.set(0,.22,5.1); plinth.receiveShadow=true; group.add(plinth);
+      for(const side of [-1,1]){
+        const pillar=new THREE.Mesh(new THREE.BoxGeometry(1.55,5.5,1.8),stone); pillar.position.set(side*3.2,2.75,5.1); pillar.castShadow=true; group.add(pillar);
+        const cap=new THREE.Mesh(new THREE.BoxGeometry(2.15,.7,2.15),dark); cap.position.set(side*3.2,5.65,5.1); group.add(cap);
+        const rune=new THREE.Mesh(new THREE.BoxGeometry(.12,2.1,.08),portalMat); rune.position.set(side*3.2,2.8,4.15); group.add(rune);
+      }
+      const lintel=new THREE.Mesh(new THREE.BoxGeometry(8.1,1.15,2.0),stone); lintel.position.set(0,5.85,5.1); lintel.castShadow=true; group.add(lintel);
+      const portal=new THREE.Mesh(new THREE.PlaneGeometry(4.9,4.3),portalMat); portal.position.set(0,2.65,4.08); group.add(portal);
+      for(let i=-2;i<=2;i++){
+        const sigil=new THREE.Mesh(new THREE.OctahedronGeometry(.28,0),portalMat); sigil.position.set(i*1.05,6.65,5.0); group.add(sigil);
+      }
+      for(const [lx,lz,r] of [[-4.6,5.1,1.1],[4.6,5.1,1.1],[-5.8,8.3,1.45],[5.8,8.3,1.45]]){
+        staticSolids.push({x:e.x+lx*Math.cos(rotY)+lz*Math.sin(rotY),z:e.z-lx*Math.sin(rotY)+lz*Math.cos(rotY),r});
+      }
+      scene.add(group); return group;
+    }
     const cosA = Math.cos(rotY), sinA = Math.sin(rotY);
     // ローカル(lx,lz)の地面の高さ(原点からの相対)
     const groundAt = (lx, lz) => islandHeight(e.x + lx*cosA + lz*sinA, e.z - lx*sinA + lz*cosA) - ey;
@@ -1462,126 +1460,575 @@ window.startGame = function(NETINIT){
     }
   }
 
-  function buildRogueliteExterior(e, ey){
-    // 島に新設する古代門。既存洞窟の岩山とは別の、遠目にも分かる門型ランドマーク。
-    const rotY = Math.atan2(e.dirX, e.dirZ);
-    const group = new THREE.Group();
-    group.position.set(e.x, ey, e.z);
-    group.rotation.y = rotY;
-    const stone = new THREE.MeshStandardMaterial({ color:0x716d62, flatShading:true, roughness:0.95 });
-    const dark = new THREE.MeshStandardMaterial({ color:0x292f35, flatShading:true, roughness:0.9 });
-    const trim = new THREE.MeshStandardMaterial({ color:0xa99c80, flatShading:true, roughness:0.85 });
-    const portalMat = new THREE.MeshStandardMaterial({ color:0x3b9c9b, emissive:0x176f78, emissiveIntensity:1.25, roughness:0.35, metalness:0.1, side:THREE.DoubleSide });
-    const runes = new THREE.MeshStandardMaterial({ color:0x93f0dc, emissive:0x38bda9, emissiveIntensity:1.35, flatShading:true });
-    const groundAt = (lx,lz) => islandHeight(e.x + lx*Math.cos(rotY) + lz*Math.sin(rotY), e.z - lx*Math.sin(rotY) + lz*Math.cos(rotY)) - ey;
-    const add = (geo,mat,x,y,z,rx=0,ry=0,rz=0) => {
-      const m = new THREE.Mesh(geo,mat); m.position.set(x, groundAt(x,z)+y, z); m.rotation.set(rx,ry,rz); m.castShadow=true; m.receiveShadow=true; group.add(m); return m;
-    };
-    // 前面の二段の基壇
-    add(roughen(new THREE.BoxGeometry(6.5,0.28,2.5),0.1),dark,0,0.12,5.0);
-    add(roughen(new THREE.BoxGeometry(5.5,0.22,1.8),0.06),trim,0,0.36,5.25);
-    // 左右の柱は押し返し判定も登録し、門の中央は塞がない。
-    for (const side of [-1,1]){
-      add(roughen(new THREE.BoxGeometry(0.86,4.8,1.0),0.08),stone,side*2.15,2.75,5.8,0,0,side*0.035);
-      add(new THREE.BoxGeometry(1.12,0.36,1.22),trim,side*2.15,5.2,5.8);
-      add(new THREE.BoxGeometry(1.28,0.22,1.34),dark,side*2.15,0.72,5.8);
-      for (let k=0;k<4;k++) add(new THREE.BoxGeometry(0.12,0.42,0.08),runes,side*2.15,1.7+k*0.72,5.27,0,0,side*0.12);
-      const wx = e.x + side*2.15*Math.cos(rotY) + 5.8*Math.sin(rotY);
-      const wz = e.z - side*2.15*Math.sin(rotY) + 5.8*Math.cos(rotY);
-      staticSolids.push({x:wx,z:wz,r:0.78});
+  // ============ v60: 高低差と裂け目の橋渡りを備えたStarBreak風ダンジョン ============
+  const ROGUE_DUNGEON_INDEX = Shared.ROGUE_DUNGEON_INDEX;
+  // StarBreakを参考に、地形を読む・分岐を選ぶ・危険な場所へ踏み込む体験を優先。
+  // 床メッシュと移動可能範囲は同じ座標定義から作り、装飾の外へ歩き抜けないようにする。
+  const ROGUE_WALK_AREAS = [
+    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0},
+    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:11, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0},
+    {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0},
+    // 西側の高台: 低い傾斜回廊から3.8m上がった見張り棚へ。
+    {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
+    {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
+    // 東側は逆に沈み込む水晶の窪地。中央の封印門を迂回できない位置で終わる。
+    {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
+    {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
+    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4},
+    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
+    {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
+  ];
+  const ROGUE_GATE_Z = [-52, -110, -158];
+  function pointSegmentDistance2D(x,z,ax,az,bx,bz){
+    const dx=bx-ax, dz=bz-az, len2=dx*dx+dz*dz;
+    const t=len2>1e-8?THREE.MathUtils.clamp(((x-ax)*dx+(z-az)*dz)/len2,0,1):0;
+    return Math.hypot(x-(ax+dx*t), z-(az+dz*t));
+  }
+  function rogueFloorHeight(x,z){
+    // 傾斜通路は接続点から接続点まで高さを線形補間し、部屋の床と段差なく結ぶ。
+    let best=null;
+    for(const a of ROGUE_WALK_AREAS){
+      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5) continue;
+      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
+      const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
+      const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
+      if(d<=a.width*.49&&(!best||d<best.d)) best={d,y:(a.yA||0)+((a.yB||0)-(a.yA||0))*t};
     }
-    add(roughen(new THREE.BoxGeometry(5.1,0.7,1.25),0.05),dark,0,5.4,5.8);
-    add(new THREE.BoxGeometry(5.4,0.22,1.45),trim,0,5.83,5.8);
-    // 発光する縦型ゲート(面は +Z を向く)
-    const portal = new THREE.Mesh(new THREE.CircleGeometry(1.42,10),portalMat);
-    portal.position.set(0,groundAt(0,6.15)+2.65,6.15); group.add(portal);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.62,0.16,7,10),runes);
-    ring.position.set(0,groundAt(0,6.12)+2.65,6.12); group.add(ring);
-    const keystone = new THREE.Mesh(new THREE.OctahedronGeometry(0.34,0),runes);
-    keystone.position.set(0,groundAt(0,6.12)+5.0,6.12); group.add(keystone);
-    for (const side of [-1,1]){
-      const shard = new THREE.Mesh(new THREE.ConeGeometry(0.24,0.8,5),runes);
-      shard.position.set(side*3.0,groundAt(side*3.0,5.5)+0.42,5.5); shard.rotation.z=side*0.3; group.add(shard);
+    if(best) return best.y;
+    for(const a of ROGUE_WALK_AREAS){
+      if(a.type==='ellipse'&&(((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2<=1.035) ) return Number.isFinite(a.floorY)?a.floorY:0;
     }
-    scene.add(group);
-    caveAnims.push(t=>{
-      const pulse=0.9+0.16*Math.sin(t*1.9)+0.06*Math.sin(t*3.7);
-      portalMat.emissiveIntensity=1.15+0.45*pulse;
-      ring.rotation.z=Math.sin(t*0.45)*0.025;
-      keystone.rotation.y=t*0.55;
-    });
+    return 0;
   }
 
-  function buildRogueliteDungeonInterior(){
-    const s = new THREE.Scene();
-    s.background = new THREE.Color(0x090d13);
-    s.fog = new THREE.FogExp2(0x090d13,0.021);
-    s.add(new THREE.HemisphereLight(0x8399a2,0x1d2428,0.72));
-    const key = new THREE.PointLight(0x75cec8,2.0,35,2); key.position.set(0,7,-4); s.add(key);
-    const warm = new THREE.PointLight(0xffb16b,1.0,24,2); warm.position.set(0,4,9); s.add(warm);
-    const floorGeo = roughen(new THREE.CircleGeometry(19.5,48).rotateX(-Math.PI/2),0.06);
-    const floorMat = new THREE.MeshStandardMaterial({color:0x30363a,flatShading:true,roughness:1,side:THREE.DoubleSide});
-    const floor = new THREE.Mesh(floorGeo,floorMat);
-    floor.position.y=INTERIOR_FLOOR_Y; floor.receiveShadow=true; s.add(floor);
-    const wallMat = new THREE.MeshStandardMaterial({color:0x353a3f,flatShading:true,roughness:1});
-    const wallDark = new THREE.MeshStandardMaterial({color:0x1d2328,flatShading:true,roughness:1});
-    const glowMat = new THREE.MeshStandardMaterial({color:0x75cec8,emissive:0x1f736f,emissiveIntensity:0.7,flatShading:true,roughness:0.55});
-    for(let i=0;i<18;i++){
-      const a=(i/18)*Math.PI*2, r=14.45+(i%3)*0.16, h=4.6+(i%4)*0.45;
-      const m=new THREE.Mesh(roughen(new THREE.IcosahedronGeometry(1.2+(i%3)*0.18,0),0.18),i%4===0?wallDark:wallMat);
-      m.scale.set(1.05,h/2,0.92); m.position.set(Math.cos(a)*r,h/2,Math.sin(a)*r); m.rotation.y=a*0.7; m.castShadow=true; s.add(m);
+  function isRogueWalkable(x,z,openGates){
+    const gates = Number.isFinite(openGates) ? openGates : (rogueRun ? rogueRun.openGates : 0);
+    for(let i=gates;i<ROGUE_GATE_Z.length;i++){
+      if(Math.abs(z-ROGUE_GATE_Z[i])<1.05 && Math.abs(x)<5.5) return false;
     }
-    // 入り口は背面(+Z)の門として維持。室内の戦闘は半径13.5m内で完結する。
-    for(const side of [-1,1]){
-      const p=new THREE.Mesh(new THREE.BoxGeometry(0.62,4.3,0.7),wallMat); p.position.set(side*2.35,2.15,15.35); s.add(p);
+    // 中央大空洞の裂け目は見た目だけの模様ではなく、橋を渡らないと通れない地形。
+    if(Math.abs(z+83)<4.55 && Math.abs(x)<38){
+      const onMainBridge=Math.abs(x)<1.95;
+      const onSideBridge=Math.abs(x-15)<1.55;
+      if(!onMainBridge&&!onSideBridge) return false;
     }
-    const lintel=new THREE.Mesh(new THREE.BoxGeometry(5.25,0.65,0.9),wallDark); lintel.position.set(0,4.42,15.35); s.add(lintel);
-    const exitGlow=new THREE.Mesh(new THREE.PlaneGeometry(3.1,3.5),new THREE.MeshBasicMaterial({color:0x9fcfc8,transparent:true,opacity:0.22,side:THREE.DoubleSide}));
-    exitGlow.position.set(0,2.0,15.05); s.add(exitGlow);
-    const roomRoot=new THREE.Group(); s.add(roomRoot);
-    const portalRoot=new THREE.Group(); portalRoot.position.set(0,0,-8.9); s.add(portalRoot);
-    const portalBase=new THREE.Mesh(new THREE.CylinderGeometry(1.9,2.2,0.28,8),wallDark); portalBase.position.y=0.14; portalRoot.add(portalBase);
-    const portalMat=new THREE.MeshStandardMaterial({color:0x303f43,emissive:0x102c31,emissiveIntensity:0.35,roughness:0.35,metalness:0.12,side:THREE.DoubleSide});
-    const portalDisk=new THREE.Mesh(new THREE.CircleGeometry(1.2,10),portalMat); portalDisk.position.set(0,1.55,0); portalRoot.add(portalDisk);
-    const portalRingMat=new THREE.MeshStandardMaterial({color:0x4c7373,emissive:0x244c50,emissiveIntensity:0.45,flatShading:true});
-    const portalRing=new THREE.Mesh(new THREE.TorusGeometry(1.45,0.16,7,10),portalRingMat); portalRing.position.set(0,1.55,0); portalRoot.add(portalRing);
-    for(let side of [-1,1]){
-      const p=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.23,2.9,6),wallMat); p.position.set(side*1.72,1.45,0); portalRoot.add(p);
-      const cap=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.18,0.7),wallDark); cap.position.set(side*1.72,2.9,0); portalRoot.add(cap);
-    }
-    return {scene:s,ore:[],exitLocal:{x:Shared.CAVE_INTERIOR_EXIT.x,z:Shared.CAVE_INTERIOR_EXIT.z},dungeon:{roomRoot,portalRoot,portalMat,portalRingMat,portalDisk,portalRing,key,warm,floorMat,roomMats:{stone:wallMat,dark:wallDark,glow:glowMat},roomSeed:0}};
+    return ROGUE_WALK_AREAS.some(a=>a.type==='ellipse'
+      ? (((x-a.x)/a.rx)**2 + ((z-a.z)/a.rz)**2 <= 1.035)
+      : pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz) <= a.width*0.53);
   }
 
-  const caves = CAVE_ENTRANCES.map((e, index) => {
+  function buildRogueDungeonInterior(){
+    const previousRandom = Math.random;
+    // 同じ島セッションでは参加者全員に同じ地形を作る。戦利品の抽選は挑戦ごとに別管理。
+    Math.random = Shared.mulberry32(((NETINIT.welcome.seed >>> 0) ^ 0x60d03a71) >>> 0);
+    try {
+      const s = new THREE.Scene();
+      s.background = new THREE.Color(0x080c13);
+      s.fog = new THREE.FogExp2(0x080c13, 0.0032);
+      s.add(new THREE.HemisphereLight(0x8499ab, 0x17191d, 0.95));
+      const fill = new THREE.DirectionalLight(0xa9c8dd, 0.75); fill.position.set(-28,42,25); s.add(fill);
+      const rockMats = [
+        new THREE.MeshStandardMaterial({color:0x373d43,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x4d5358,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x65665f,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x272e35,flatShading:true,roughness:1}),
+      ];
+      const stoneMats = [
+        new THREE.MeshStandardMaterial({color:0x5a6063,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x6d706d,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x42494f,flatShading:true,roughness:1}),
+      ];
+      const glowMat = new THREE.MeshStandardMaterial({color:0x82eced,emissive:0x218f9a,emissiveIntensity:1.15,roughness:.42,metalness:.08,flatShading:true});
+      const warmGlow = new THREE.MeshStandardMaterial({color:0xe4b46d,emissive:0x8a4f1c,emissiveIntensity:.75,roughness:.6,flatShading:true});
+      const darkStone = new THREE.MeshStandardMaterial({color:0x262b30,roughness:1,flatShading:true});
+      // ひとつの大きな岩盤殻で全区画を包み、遠くの天井と壁が続いて見えるようにする。
+      const shellGeo = new THREE.SphereGeometry(1,32,20);
+      const shell = new THREE.Mesh(shellGeo, new THREE.MeshStandardMaterial({color:0x343a41,roughness:1,flatShading:true,side:THREE.BackSide}));
+      shell.scale.set(124,43,145); shell.position.set(0,18,-97); s.add(shell);
+      const floorMat = new THREE.MeshStandardMaterial({color:0x4a4b47,roughness:1,flatShading:true});
+      const floorDark = new THREE.MeshStandardMaterial({color:0x353b40,roughness:1,flatShading:true});
+      const floorLight = new THREE.MeshStandardMaterial({color:0x5e605b,roughness:1,flatShading:true});
+      function addEllipseFloor(cx,cz,rx,rz,variant,floorY=0,hole=null){
+        // 完全な円盤を並べない。少し不規則な岩床の輪郭にし、中央洞窟では裂け目を実際に床メッシュから抜く。
+        const shape=new THREE.Shape();
+        const points=64;
+        for(let i=0;i<points;i++){
+          const a=i/points*Math.PI*2, jag=0.99+Math.random()*.02;
+          const x=Math.cos(a)*rx*jag, y=-Math.sin(a)*rz*jag;
+          if(i===0) shape.moveTo(x,y); else shape.lineTo(x,y);
+        }
+        shape.closePath();
+        if(hole){
+          const cut=new THREE.Path();
+          const hn=64;
+          for(let i=0;i<hn;i++){
+            const a=i/hn*Math.PI*2;
+            const x=(hole.x||0)+Math.cos(a)*hole.rx;
+            const y=-((hole.z||0)+Math.sin(a)*hole.rz);
+            if(i===0) cut.moveTo(x,y); else cut.lineTo(x,y);
+          }
+          cut.closePath(); shape.holes.push(cut);
+        }
+        const geo=new THREE.ShapeGeometry(shape,1); geo.rotateX(-Math.PI/2);
+        const mesh=new THREE.Mesh(geo,variant===1?floorLight:variant===2?floorDark:floorMat);
+        mesh.position.set(cx,floorY-.14,cz); mesh.receiveShadow=true; s.add(mesh);
+      }
+      function addCorridorFloor(ax,az,bx,bz,width,yA=0,yB=0){
+        const dx=bx-ax,dz=bz-az,length=Math.hypot(dx,dz), px=dz/length*width*.5,pz=-dx/length*width*.5;
+        const geo=new THREE.BufferGeometry();
+        geo.setAttribute('position',new THREE.Float32BufferAttribute([
+          ax+px,yA-.14,az+pz, ax-px,yA-.14,az-pz,
+          bx+px,yB-.14,bz+pz, bx-px,yB-.14,bz-pz
+        ],3));
+        geo.setIndex([0,1,2,1,3,2]); geo.computeVertexNormals();
+        const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x353b40,roughness:1,flatShading:true,side:THREE.DoubleSide}));
+        m.receiveShadow=true; s.add(m);
+        // 端の低い岩縁も傾斜に合わせて回転し、上り坂の脇で浮かないようにする。
+        const angleY=Math.atan2(dx,dz), pitch=-Math.atan2(yB-yA,length), avgY=(yA+yB)*.5;
+        const edgeGeo=new THREE.BoxGeometry(.34,.42,length);
+        for(const side of [-1,1]){
+          const wall=new THREE.Mesh(edgeGeo,rockMats[1]);
+          wall.position.set((ax+bx)/2+Math.cos(angleY)*side*(width/2+.18),avgY+.14,(az+bz)/2-Math.sin(angleY)*side*(width/2+.18));
+          wall.rotation.set(pitch,angleY,0); s.add(wall);
+        }
+      }
+      for(const a of ROGUE_WALK_AREAS){
+        if(a.type==='ellipse'){
+          const centralChasm=(a.x===0&&a.z===-83);
+          addEllipseFloor(a.x,a.z,a.rx,a.rz,Math.random()<.22?1:Math.random()<.25?2:0,Number.isFinite(a.floorY)?a.floorY:0,centralChasm?{x:0,z:0,rx:35.5,rz:4.55}:null);
+        } else addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+      }
+      // 古代の石畳。均一なタイル床にせず、ひび割れたパネルを要所へだけ置く。
+      const tileGeo=new THREE.BoxGeometry(2.4,.1,1.25);
+      for(const area of [{x:0,z:-32,n:24},{x:0,z:-81,n:46},{x:0,z:-136,n:28},{x:0,z:-184,n:40}]){
+        for(let i=0;i<area.n;i++){
+          const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(area.z===-81?24:area.z===-184?23:area.z===-32?13:16);
+          const m=new THREE.Mesh(tileGeo,stoneMats[Math.floor(Math.random()*stoneMats.length)]);
+          const tx=area.x+Math.cos(a)*r,tz=area.z+Math.sin(a)*r*.68; if(Math.abs(tz+83)<4.7&&Math.abs(tx)<36) continue; m.position.set(tx,rogueFloorHeight(tx,tz)-.045,tz); m.rotation.y=(Math.random()-.5)*.5; s.add(m);
+        }
+      }
+      // 各広間の縁を天然岩で囲む。通路と分岐の入口は空け、歩ける幅より外側に配置する。
+      // 同じ低ポリ岩形状を共有し、素材別InstancedMeshにまとめる。岩の数を保ちつつ描画コールを抑える。
+      const rogueRockGeo=roughen(new THREE.IcosahedronGeometry(1,1),.18);
+      const rogueRockBatches=new Map();
+      function addRock(x,y,z,rx,ry,rz,mat){
+        const useMat=mat||rockMats[0];
+        let batch=rogueRockBatches.get(useMat); if(!batch){batch=[];rogueRockBatches.set(useMat,batch);}
+        batch.push({x,y,z,rx,ry,rz,rotX:(Math.random()-.5)*.28,rotY:Math.random()*Math.PI*2,rotZ:(Math.random()-.5)*.25});
+      }
+      function flushRogueRockBatches(){
+        const dummy=new THREE.Object3D();
+        for(const [mat,items] of rogueRockBatches){
+          if(!items.length) continue;
+          const batch=new THREE.InstancedMesh(rogueRockGeo,mat,items.length);
+          batch.castShadow=items.some(item=>Math.max(item.rx,item.ry,item.rz)>2.2); batch.receiveShadow=true;
+          for(let i=0;i<items.length;i++){
+            const item=items[i]; dummy.position.set(item.x,item.y,item.z); dummy.scale.set(item.rx,item.ry,item.rz); dummy.rotation.set(item.rotX,item.rotY,item.rotZ); dummy.updateMatrix(); batch.setMatrixAt(i,dummy.matrix);
+          }
+          batch.instanceMatrix.needsUpdate=true; s.add(batch);
+        }
+        rogueRockBatches.clear();
+      }
+      // 中央裂け目: 床をくり抜き、底を約5m下げた天然の大亀裂として作る。
+      const chasmBottomGeo=new THREE.CircleGeometry(1,48); chasmBottomGeo.rotateX(-Math.PI/2);
+      const chasmBottom=new THREE.Mesh(chasmBottomGeo,new THREE.MeshStandardMaterial({color:0x10151a,roughness:1,flatShading:true}));
+      chasmBottom.scale.set(35.5,1,4.5); chasmBottom.position.set(0,-5.35,-83); s.add(chasmBottom);
+      for(let i=0;i<18;i++){
+        const x=-33+i*(66/17);
+        // 二本の橋の入口をふさがない。
+        if(Math.abs(x)<3.2||Math.abs(x-15)<2.5) continue;
+        for(const z of [-78.55,-87.45]){
+          addRock(x,-1.7+Math.random()*.45,z,1.5+Math.random()*.7,2.0+Math.random()*1.6,1.0+Math.random()*.7,rockMats[(i+(z< -83?1:0))%rockMats.length]);
+        }
+      }
+      // 古い中央橋は欠けた石板、東の橋は狭い一本橋。渡る位置を選ぶ必要がある。
+      for(const bridge of [{x:0,width:3.75,seed:0},{x:15,width:2.95,seed:1}]){
+        for(let i=0;i<8;i++){
+          const slab=new THREE.Mesh(new THREE.BoxGeometry(bridge.width,.28,1.66),stoneMats[(i+bridge.seed)%stoneMats.length]);
+          slab.position.set(bridge.x,-.14,-90.1+i*1.95); slab.rotation.y=(i%2===0?-.018:.018); slab.castShadow=true; slab.receiveShadow=true; s.add(slab);
+        }
+        for(const side of [-1,1]) for(const z of [-88.6,-84.7,-80.8,-76.9]){
+          const broken=new THREE.Mesh(new THREE.BoxGeometry(.28,.65,.65),stoneMats[2]);
+          broken.position.set(bridge.x+side*(bridge.width/2+.08),.13,z); broken.rotation.z=(side===1?.08:-.06); s.add(broken);
+        }
+      }
+      // 裂け目の底にも細い結晶があり、落差を目で把握できるようにする。
+      const chasmCrystalGeo=new THREE.ConeGeometry(1,1,5);
+      for(let i=0;i<9;i++){
+        const x=-22+i*5.2,h=.7+(i%3)*.35;
+        const shard=new THREE.Mesh(chasmCrystalGeo,glowMat); shard.scale.set(.22,h,.22);
+        shard.position.set(x,-5.35+h/2,-83+(i%2?1.2:-1.2)); shard.rotation.z=(i%2?-.12:.1); s.add(shard);
+      }
+
+      function rockRim(cx,cz,rx,rz,n,floorY=0){
+        for(let i=0;i<n;i++){
+          const a=(i/n)*Math.PI*2+(Math.random()-.5)*.13;
+          const x=cx+Math.cos(a)*(rx+2.7+Math.random()*2.5), z=cz+Math.sin(a)*(rz+2.2+Math.random()*2.3);
+          if(Math.abs(z+52)<13&&Math.abs(x)<8) continue;
+          if(Math.abs(z+110)<13&&Math.abs(x)<8) continue;
+          if(Math.abs(z+158)<13&&Math.abs(x)<8) continue;
+          addRock(x,floorY+.6+Math.random()*1.5,z,1.7+Math.random()*2.7,1.1+Math.random()*2.2,1.6+Math.random()*2.8,rockMats[Math.floor(Math.random()*rockMats.length)]);
+        }
+      }
+      rockRim(0,12,19,16,26,0); rockRim(0,-37,23,16,30,0); rockRim(0,-83,36,25,46,0);
+      rockRim(-42,-66,15,13,22,3.8); rockRim(44,-97,16,14,22,-2.6); rockRim(0,-137,27,18,34,-1.4); rockRim(0,-184,35,24,44,-5.2);
+      // 東側の窪地には浅い地下水を配置。水面は歩行面に重ねるが、床判定と敵AIは岩床を使う。
+      const poolGeo=new THREE.CircleGeometry(1,40); poolGeo.rotateX(-Math.PI/2);
+      const poolMat=new THREE.MeshStandardMaterial({color:0x163a45,emissive:0x071c26,emissiveIntensity:.45,transparent:true,opacity:.78,roughness:.28,metalness:.12,side:THREE.DoubleSide,depthWrite:false});
+      const pool=new THREE.Mesh(poolGeo,poolMat); pool.scale.set(9.1,1,5.6); pool.position.set(46.5,-2.53,-98.4); s.add(pool);
+      const poolEdgeMat=new THREE.MeshStandardMaterial({color:0x2f636b,emissive:0x0d3840,emissiveIntensity:.32,roughness:.4,transparent:true,opacity:.6});
+      for(const ring of [{r:7.8,t:.07},{r:5.4,t:.05}]){
+        const ripple=new THREE.Mesh(new THREE.TorusGeometry(ring.r,ring.t,5,36),poolEdgeMat); ripple.rotation.x=Math.PI/2; ripple.scale.z=.62; ripple.position.set(46.5,-2.49,-98.4); s.add(ripple);
+      }
+      // 通路上の崩落岩は左右へ寄せ、プレイヤーが真ん中を通れる幅を保つ。
+      for(const seg of [{z:-9,len:22,w:10},{z:-56,len:12,w:9},{z:-115,len:16,w:10},{z:-160,len:12,w:9}]){
+        for(let side of [-1,1]) for(let i=0;i<4;i++){const x=side*(seg.w/2+1.7+Math.random()*1.5),z=seg.z+(i-1.5)*(seg.len/4); addRock(x,rogueFloorHeight(x,z)+.5+Math.random()*.5,z,1.1+Math.random()*.8,.8+Math.random()*.8,1.3+Math.random(),rockMats[(i+(side>0?1:0))%rockMats.length]);}
+      }
+      flushRogueRockBatches();
+      // 壊れた柱・アーチ。石柱の高さと太さを変え、各エリアに異なるシルエットを作る。
+      function addPillar(x,z,h,wide,matIndex,baseY=0){
+        const base=new THREE.Mesh(new THREE.CylinderGeometry(wide*.78,wide,h*.25,6),stoneMats[matIndex%stoneMats.length]); base.position.set(x,baseY+h*.125,z); s.add(base);
+        const shaft=new THREE.Mesh(new THREE.CylinderGeometry(wide*.42,wide*.62,h*.62,6),stoneMats[(matIndex+1)%stoneMats.length]); shaft.position.set(x,baseY+h*.56,z); shaft.castShadow=true; s.add(shaft);
+        const cap=new THREE.Mesh(new THREE.BoxGeometry(wide*1.6,.42,wide*1.6),stoneMats[(matIndex+2)%stoneMats.length]); cap.position.set(x,baseY+h*.89,z); s.add(cap);
+      }
+      for(const p of [[-10,-34,6,1.1,0,0],[10,-39,4.5,.9,1,0],[-27,-92,8,1.25,2,0],[25,-74,6,.9,1,0],[-8,-132,7,1.0,0,-1.4],[9,-142,5,.85,2,-1.4],[-18,-181,9,1.4,1,-5.2],[18,-187,8,1.2,0,-5.2],[-43,-66,6,1.35,1,3.8],[-49,-64,4.5,.95,2,3.8]]) addPillar(...p);
+      // 西側の高台は柱脚の上に崩れた石橋が残る。床面を高くしているため、下から見上げると段差が読める。
+      for(const [x,z] of [[-52,-70],[-42,-73],[-32,-70]]){
+        const support=new THREE.Mesh(new THREE.CylinderGeometry(.7,.95,3.8,6),stoneMats[2]);
+        support.position.set(x,1.9,z); support.castShadow=true; s.add(support);
+      }
+      // 中央の大崩落橋: 幅を持たせた石の床と欠けた欄干を左右の壁から張り出す。
+      for(let i=0;i<7;i++){
+        const z=-73-i*2.15, x=(i%2===0?-1:1)*(4.4+(i%3)*.4);
+        const slab=new THREE.Mesh(new THREE.BoxGeometry(3.8,.38,2.25),stoneMats[i%stoneMats.length]);
+        slab.position.set(x,rogueFloorHeight(x,z)-.08,z);slab.rotation.y=(i%2?-.06:.04);slab.castShadow=true;s.add(slab);
+      }
+      // 巨大な鍾乳石。上部の暗い天井と高さを示し、地形を狭く見せない。
+      const stalactiteGeo=new THREE.ConeGeometry(1,1,5);
+      for(let i=0;i<34;i++){
+        const x=(Math.random()-.5)*150, z=30-Math.random()*245;
+        const h=3+Math.random()*9, r=.45+Math.random()*1.25;
+        const m=new THREE.Mesh(stalactiteGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);
+        m.scale.set(r,h,r); m.rotation.x=Math.PI; m.position.set(x,31+Math.random()*8-h*.45,z); m.castShadow=false; s.add(m);
+      }
+      // 結晶群を主な広間と分岐の奥へ。発光材は共有してドローコールとメモリ負荷を抑える。
+      const crystalGeo=new THREE.ConeGeometry(1,1,5);
+      for(const spot of [[-11,-31],[13,-42],[-50,-66],[52,-96],[-13,-131],[12,-144],[-20,-190],[19,-177]]){
+        const count=3+Math.floor(Math.random()*3);
+        for(let j=0;j<count;j++){
+          const h=.8+Math.random()*2.4, r=.18+Math.random()*.18;
+          const c=new THREE.Mesh(crystalGeo,glowMat); c.scale.set(r,h,r);
+          const cx=spot[0]+(Math.random()-.5)*1.3,cz=spot[1]+(Math.random()-.5)*1.3; c.position.set(cx,rogueFloorHeight(cx,cz)+h/2,cz); c.rotation.z=(Math.random()-.5)*.22; s.add(c);
+        }
+      }
+      // 明かりは主要区画にのみ設置。
+      for(const l of [[0,9, -34,0x91e4e9],[0,10,-82,0x77d5dd],[-40,7,-66,0xe4b46d],[43,7,-97,0x91e4e9],[0,9,-138,0x77d5dd],[0,12,-184,0xeca7ff]]){
+        const pl=new THREE.PointLight(l[3],1.5,37,2); pl.position.set(l[0],l[1],l[2]); s.add(pl);
+      }
+      // 石の封印門。閉じている間はクライアントの歩行範囲判定も同じ場所で止める。
+      const gates=[];
+      for(let i=0;i<ROGUE_GATE_Z.length;i++){
+        const z=ROGUE_GATE_Z[i], group=new THREE.Group(); group.position.set(0,rogueFloorHeight(0,z),z);
+        for(const x of [-5.2,5.2]){
+          const p=new THREE.Mesh(new THREE.BoxGeometry(1.0,5.4,1.4),rockMats[2]); p.position.set(x,2.7,0); p.castShadow=true; group.add(p);
+          const cap=new THREE.Mesh(new THREE.BoxGeometry(1.65,.7,1.7),stoneMats[1]); cap.position.set(x,5.45,0); group.add(cap);
+        }
+        const lintel=new THREE.Mesh(new THREE.BoxGeometry(11.6,1.05,1.5),rockMats[1]); lintel.position.set(0,5.9,0); group.add(lintel);
+        const seal=new THREE.Mesh(new THREE.PlaneGeometry(9.1,3.5),new THREE.MeshBasicMaterial({color:i===2?0xc38cff:0x47cbd3,transparent:true,opacity:.52,side:THREE.DoubleSide,depthWrite:false}));
+        seal.position.set(0,2.2,.82); group.add(seal); s.add(group); gates.push({group,seal});
+      }
+      // 帰還用の入口門(手前)と撃破後の脱出門(最深部)。
+      function addPortal(x,z,color){
+        const group=new THREE.Group(); group.position.set(x,rogueFloorHeight(x,z),z);
+        for(const side of [-1,1]){
+          const pillar=new THREE.Mesh(new THREE.BoxGeometry(.85,4.5,.9),stoneMats[1]); pillar.position.set(side*2.4,2.25,0); group.add(pillar);
+          const cap=new THREE.Mesh(new THREE.BoxGeometry(1.2,.45,1.2),stoneMats[0]); cap.position.set(side*2.4,4.55,0); group.add(cap);
+        }
+        const beam=new THREE.Mesh(new THREE.BoxGeometry(5.7,.8,1.0),stoneMats[1]); beam.position.set(0,4.8,0); group.add(beam);
+        const disc=new THREE.Mesh(new THREE.PlaneGeometry(3.8,4.0),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.52,side:THREE.DoubleSide,depthWrite:false})); disc.position.set(0,2.1,-.2); group.add(disc);
+        s.add(group); return group;
+      }
+      const returnPortal=addPortal(0,13.4,0x7fdbe8);
+      const extractionPortal=addPortal(0,-201,0xe7b8ff); extractionPortal.visible=false;
+      // 恒久強化の祭壇は開始広間の脇に配置し、帰還門と接触判定が重ならないようにする。
+      const altar=new THREE.Group(); altar.position.set(8.5,0,10.5);
+      const plinth=new THREE.Mesh(new THREE.CylinderGeometry(1.65,1.9,.7,7),stoneMats[0]); plinth.position.y=.35; altar.add(plinth);
+      const obelisk=new THREE.Mesh(new THREE.OctahedronGeometry(1.05,0),glowMat); obelisk.position.y=1.55; obelisk.scale.set(.7,1.35,.7); altar.add(obelisk);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(1.25,.09,6,12),warmGlow); ring.position.y=1.2; ring.rotation.x=Math.PI/2; altar.add(ring); s.add(altar);
+      s.userData.rogueGates=gates;
+      s.userData.rogueExtractionPortal=extractionPortal;
+      s.userData.rogueAltar={x:8.5,z:10.5};
+      return {scene:s,ore:[],exitLocal:{x:Shared.CAVE_INTERIOR_EXIT.x,z:Shared.CAVE_INTERIOR_EXIT.z},isRogueDungeon:true};
+    } finally {
+      Math.random = previousRandom;
+    }
+  }
+
+  const caves = CAVE_ENTRANCES.map((e, idx) => {
     const ey = islandHeight(e.x, e.z);
-    if (index === ROGUE_DUNGEON_CAVE_INDEX) buildRogueliteExterior(e, ey);
-    else buildCaveExterior(e, ey);
+    buildCaveExterior(e, ey);
 
-    const interior = index === ROGUE_DUNGEON_CAVE_INDEX ? buildRogueliteDungeonInterior() : buildCaveInterior();
+    const interior = e.rogue ? buildRogueDungeonInterior() : buildCaveInterior();
     return {
       entrance: { x:e.x, y:ey, z:e.z },
       // 見た目の入口(岩山の開口部)の位置と、洞窟から外へ向かう方向の逆(=山の奥行き方向)
       mouth: { x: e.x + e.dirX*CAVE_MOUTH_OFFSET, z: e.z + e.dirZ*CAVE_MOUTH_OFFSET },
       dir: { x:e.dirX, z:e.dirZ },
+      rogue: !!e.rogue,
       interiorScene: interior.scene,
       ore: interior.ore,
       exitLocal: interior.exitLocal,
-      dungeon: interior.dungeon || null,
+      isRogueDungeon: !!interior.isRogueDungeon,
     };
   });
 
-  let rogueRun = null;
   let inCaveIndex = -1;      // -1 = 屋外、0以上 = caves[index]の内部にいる
   let savedOutdoorPos = null;
   let savedOutdoorYaw = 0;
-
+  let savedOutdoorHp = 100;
+  let rogueRun = null;
+  let rogueRunCount = 0;
+  const ROGUE_META_KEY = 'lowpoly-island-rogue-meta-v60';
+  const rogueMeta = { shards:0, attack:0, armor:0 };
+  try {
+    const savedMeta=JSON.parse(localStorage.getItem(ROGUE_META_KEY)||'{}');
+    rogueMeta.shards=Math.max(0,Math.min(999999,Math.floor(Number(savedMeta.shards)||0)));
+    rogueMeta.attack=Math.max(0,Math.min(12,Math.floor(Number(savedMeta.attack)||0)));
+    rogueMeta.armor=Math.max(0,Math.min(12,Math.floor(Number(savedMeta.armor)||0)));
+  } catch(e) { /* 初回起動または不正な保存値 */ }
+  function saveRogueMeta(){ try { localStorage.setItem(ROGUE_META_KEY,JSON.stringify(rogueMeta)); } catch(e){} }
+  const rogueHud = document.getElementById('rogueHud');
+  const rogueMetaPanel = document.getElementById('rogueMetaPanel');
+  const rogueMetaBalance = document.getElementById('rogueMetaBalance');
+  const rogueBuyAttack = document.getElementById('rogueBuyAttack');
+  const rogueBuyArmor = document.getElementById('rogueBuyArmor');
+  const rogueMetaClose = document.getElementById('rogueMetaClose');
   let camSnap = false; // 洞窟の出入りではカメラを補間せず一気に移す
+
+  function updateRogueMetaPanel(){
+    if(!rogueMetaBalance) return;
+    rogueMetaBalance.textContent='持ち帰った欠片：'+rogueMeta.shards;
+    const attackCost=3+rogueMeta.attack*3, armorCost=4+rogueMeta.armor*3;
+    rogueBuyAttack.textContent=`攻撃力 +1（Lv.${rogueMeta.attack} → ${rogueMeta.attack+1}） / 欠片 ${attackCost}`;
+    rogueBuyArmor.textContent=`防御力 +1（Lv.${rogueMeta.armor} → ${rogueMeta.armor+1}） / 欠片 ${armorCost}`;
+    rogueBuyAttack.disabled=rogueMeta.shards<attackCost||rogueMeta.attack>=12;
+    rogueBuyArmor.disabled=rogueMeta.shards<armorCost||rogueMeta.armor>=12;
+  }
+  function openRogueMetaPanel(){ updateRogueMetaPanel(); rogueMetaPanel.classList.add('show'); }
+  function closeRogueMetaPanel(){ rogueMetaPanel.classList.remove('show'); }
+  rogueBuyAttack.addEventListener('click',()=>{
+    const cost=3+rogueMeta.attack*3; if(rogueMeta.shards<cost||rogueMeta.attack>=12) return;
+    rogueMeta.shards-=cost; rogueMeta.attack++; saveRogueMeta(); updateRogueMetaPanel();
+    if(rogueRun) updateRogueHud(); showToast('恒久強化：攻撃力 +1','遺跡の祭壇');
+  });
+  rogueBuyArmor.addEventListener('click',()=>{
+    const cost=4+rogueMeta.armor*3; if(rogueMeta.shards<cost||rogueMeta.armor>=12) return;
+    rogueMeta.shards-=cost; rogueMeta.armor++; saveRogueMeta(); updateRogueMetaPanel();
+    if(rogueRun) updateRogueHud(); showToast('恒久強化：防御力 +1','遺跡の祭壇');
+  });
+  rogueMetaClose.addEventListener('click',closeRogueMetaPanel);
+  rogueMetaPanel.addEventListener('click',e=>{ if(e.target===rogueMetaPanel) closeRogueMetaPanel(); });
+
+  let rogueHudLast='';
+  function updateRogueHud(){
+    if(!rogueRun){ rogueHud.classList.remove('show'); rogueHudLast=''; return; }
+    const stages=['入口層','崩落回廊','結晶洞窟','深層遺跡','守護者撃破'];
+    const remaining=rogueRun.enemies.filter(e=>e.stage===rogueRun.stage&&e.hp>0&&!e.dying).length;
+    const stageText=rogueRun.stage<3?stages[rogueRun.stage]:rogueRun.stage===3?'守護者の間':stages[4];
+    const goal=rogueRun.stage<3?`この区画の敵を撃破：残り ${remaining}`:rogueRun.stage===3?'守護者を倒して脱出門を開く':'脱出門から生還する';
+    const bossText=rogueRun.boss&&rogueRun.stage>=3&&rogueRun.boss.hp>0?` / 守護者HP ${rogueRun.boss.hp}/${rogueRun.boss.maxHp}`:'';
+    const html=`<strong>深層遺跡</strong>　RUN ${rogueRun.runNo}　${stageText}<br><span class="sub">${goal}${bossText}　｜　未精算の欠片 ${rogueRun.shards}　｜　武器 +${rogueRun.weaponBonus+rogueMeta.attack}　防具 +${rogueRun.armorBonus+rogueMeta.armor}</span>`;
+    if(html!==rogueHudLast){rogueHud.innerHTML=html;rogueHudLast=html;}
+    rogueHud.classList.add('show');
+  }
+
+  const ROGUE_ENEMY_MATS={
+    shade:new THREE.MeshStandardMaterial({color:0x4b607b,emissive:0x182f52,emissiveIntensity:.4,flatShading:true,roughness:.85}),
+    crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
+    sentinel:new THREE.MeshStandardMaterial({color:0x777a78,emissive:0x242a2b,emissiveIntensity:.28,flatShading:true,roughness:.85}),
+    eye:new THREE.MeshBasicMaterial({color:0xff805e}),
+    boss:new THREE.MeshStandardMaterial({color:0x4b394f,emissive:0x57206c,emissiveIntensity:.6,flatShading:true,roughness:.78})
+  };
+  const ROGUE_GEOMETRIES={
+    crawlerBody:new THREE.DodecahedronGeometry(.72,0), crawlerLeg:new THREE.ConeGeometry(.17,.95,5),
+    body:new THREE.IcosahedronGeometry(.82,0), bossBody:new THREE.IcosahedronGeometry(1.45,0),
+    head:new THREE.DodecahedronGeometry(.42,0), bossHead:new THREE.DodecahedronGeometry(.62,0),
+    arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
+    bossSpike:new THREE.ConeGeometry(.28,.95,5), eye:new THREE.OctahedronGeometry(.11,0)
+  };
+  const ROGUE_EYE_GEO=ROGUE_GEOMETRIES.eye;
+  const ROGUE_CHEST_MATS={
+    wood:new THREE.MeshStandardMaterial({color:0x72502d,flatShading:true,roughness:1}),
+    metal:new THREE.MeshStandardMaterial({color:0x9a9f9f,metalness:.45,roughness:.55,flatShading:true}),
+    latch:new THREE.MeshStandardMaterial({color:0xc9aa6b,metalness:.35,roughness:.5,flatShading:true})
+  };
+  const ROGUE_CHEST_GEOS={base:new THREE.BoxGeometry(1.45,.72,1.05),band:new THREE.BoxGeometry(.12,.77,1.12),lid:new THREE.BoxGeometry(1.45,.28,1.05),latch:new THREE.BoxGeometry(.22,.32,.1)};
+  function makeRogueEnemy(kind,x,z,hp,stage,boss){
+    const g=new THREE.Group();
+    const mat=boss?ROGUE_ENEMY_MATS.boss:(ROGUE_ENEMY_MATS[kind]||ROGUE_ENEMY_MATS.shade);
+    if(kind==='crawler'){
+      const body=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerBody,mat); body.position.y=.72; body.scale.set(1.15,.72,1.3); g.add(body);
+      for(let i=0;i<6;i++){
+        const leg=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerLeg,mat); const a=i/6*Math.PI*2;
+        leg.position.set(Math.cos(a)*.67,.32,Math.sin(a)*.68); leg.rotation.z=Math.cos(a)*.8; leg.rotation.x=Math.sin(a)*.55; g.add(leg);
+      }
+    }else{
+      const body=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossBody:ROGUE_GEOMETRIES.body,mat); body.position.y=boss?1.65:1.0; body.scale.set(1,boss?1.35:1.12,.9); body.castShadow=true; g.add(body);
+      const head=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossHead:ROGUE_GEOMETRIES.head,mat); head.position.set(0,boss?2.85:1.85,-.18); g.add(head);
+      const eyeL=new THREE.Mesh(ROGUE_EYE_GEO,ROGUE_ENEMY_MATS.eye),eyeR=eyeL.clone(); eyeL.position.set(-.19,boss?2.95:1.9,-.55); eyeR.position.set(.19,boss?2.95:1.9,-.55); g.add(eyeL,eyeR);
+      for(const side of [-1,1]){
+        const arm=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossArm:ROGUE_GEOMETRIES.arm,mat); arm.position.set(side*(boss?1.35:.83),boss?1.55:.95,-.02); arm.rotation.z=side*.42; g.add(arm);
+      }
+      if(boss){
+        for(let i=0;i<5;i++){ const spike=new THREE.Mesh(ROGUE_GEOMETRIES.bossSpike,mat); spike.position.set((i-2)*.5,3.35,-.18); spike.rotation.z=(i-2)*.16; g.add(spike); }
+      }
+    }
+    g.position.set(x,rogueFloorHeight(x,z),z); g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene; sceneRef.add(g);
+    return {kind,x,z,hp,maxHp:hp,stage,boss:!!boss,mesh:g,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
+  }
+  function makeRogueChest(x,z){
+    const g=new THREE.Group();
+    const base=new THREE.Mesh(ROGUE_CHEST_GEOS.base,ROGUE_CHEST_MATS.wood); base.position.y=.42; g.add(base);
+    for(const bx of [-.46,.46]){const band=new THREE.Mesh(ROGUE_CHEST_GEOS.band,ROGUE_CHEST_MATS.metal);band.position.set(bx,.45,0);g.add(band);}
+    const lidPivot=new THREE.Group(); lidPivot.position.set(0,.76,-.48); g.add(lidPivot);
+    const lid=new THREE.Mesh(ROGUE_CHEST_GEOS.lid,ROGUE_CHEST_MATS.wood); lid.position.set(0,.04,.48); lidPivot.add(lid);
+    const latch=new THREE.Mesh(ROGUE_CHEST_GEOS.latch,ROGUE_CHEST_MATS.latch); latch.position.set(0,.02,.98); lidPivot.add(latch);
+    g.position.set(x,rogueFloorHeight(x,z),z); caves[ROGUE_DUNGEON_INDEX].interiorScene.add(g);
+    return {kind:'rogueChest',x,z,mesh:g,lidPivot,opened:false};
+  }
+
+  function cleanupRogueRun(){
+    const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene;
+    if(rogueRun){
+      for(const e of rogueRun.enemies){ if(e.mesh&&e.mesh.parent)e.mesh.parent.remove(e.mesh); }
+      for(const c of rogueRun.chests){ if(c.mesh&&c.mesh.parent)c.mesh.parent.remove(c.mesh); }
+    }
+    for(const gate of (sceneRef.userData.rogueGates||[])) gate.seal.visible=true;
+    if(sceneRef.userData.rogueExtractionPortal) sceneRef.userData.rogueExtractionPortal.visible=false;
+    closeRogueMetaPanel(); rogueRun=null; rogueHud.classList.remove('show');
+  }
+  function startRogueRun(){
+    cleanupRogueRun();
+    rogueRunCount++;
+    rogueRun={active:true,runNo:rogueRunCount,stage:0,openGates:0,shards:0,weaponBonus:0,armorBonus:0,enemies:[],chests:[],boss:null,lastPos:{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z},extractReady:false};
+    const packs=[
+      {stage:0,kind:'shade',hp:3,spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]]},
+      {stage:1,kind:'crawler',hp:4,spots:[[-9,-75],[8,-74],[0,-93],[-42,-65],[43,-95],[49,-101]]},
+      {stage:2,kind:'sentinel',hp:5,spots:[[-10,-132],[10,-132],[-6,-141],[7,-143],[0,-147]]}
+    ];
+    for(const pack of packs){
+      for(const [x,z] of pack.spots) rogueRun.enemies.push(makeRogueEnemy(pack.kind,x+(Math.random()-.5)*3.4,z+(Math.random()-.5)*3.4,pack.hp,pack.stage,false));
+    }
+    rogueRun.boss=makeRogueEnemy('sentinel',0,-184,42,3,true); rogueRun.boss.mesh.visible=false;
+    const chests=[[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
+    for(const [bx,bz,stage] of chests){
+      const x=bx+(Math.random()-.5)*(stage===1?4.5:3.2), z=bz+(Math.random()-.5)*(stage===1?4.0:3.0);
+      rogueRun.chests.push({...makeRogueChest(x,z),stage});
+    }
+    const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene;
+    for(const gate of sceneRef.userData.rogueGates||[]){gate.group.visible=true;gate.seal.visible=true;}
+    if(sceneRef.userData.rogueExtractionPortal) sceneRef.userData.rogueExtractionPortal.visible=false;
+    playerHp=PLAYER_MAX_HP; updatePlayerHpBar(); updateRogueHud();
+    showToast('分岐する遺跡へ。敵を突破し、装備を拾い、無事に帰還せよ。','深層探索');
+  }
+  function openRogueChest(chest){
+    if(!rogueRun||!chest||chest.opened)return;
+    chest.opened=true; chest.lidPivot.rotation.x=-1.05;
+    const roll=Math.random();
+    if(roll<.56){
+      const bonus=1+Math.floor(Math.random()*3),names=['欠けた遺跡剣','月影の刃','深淵の大剣'];
+      if(bonus>rogueRun.weaponBonus){rogueRun.weaponBonus=bonus;showToast(`${names[bonus-1]}を装備（攻撃 +${bonus}）`,'戦利品');}
+      else {rogueRun.shards+=2;showToast('より強い武器は見つからなかった。欠片 +2','戦利品');}
+    }else{
+      const bonus=1+Math.floor(Math.random()*2),names=['守護者の外殻','結晶の胸当て'];
+      if(bonus>rogueRun.armorBonus){rogueRun.armorBonus=bonus;showToast(`${names[Math.min(names.length-1,bonus-1)]}を装備（防御 +${bonus}）`,'戦利品');}
+      else {rogueRun.shards+=2;showToast('より強い防具は見つからなかった。欠片 +2','戦利品');}
+    }
+    rogueRun.shards+=2; updateRogueHud();
+  }
+  function setRogueGateOpen(count){
+    if(!rogueRun)return;
+    rogueRun.openGates=Math.max(rogueRun.openGates,count);
+    const gates=caves[ROGUE_DUNGEON_INDEX].interiorScene.userData.rogueGates||[];
+    for(let i=0;i<gates.length;i++) gates[i].seal.visible=i>=rogueRun.openGates;
+  }
+  function updateRogueDungeon(dt){
+    if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun||!rogueRun.active||playerDead)return;
+    for(const e of rogueRun.enemies){
+      if(e.hp>0&&e.flash>0){e.flash=Math.max(0,e.flash-dt);if(e.flash<=0)e.mesh.scale.setScalar(1);}
+      if(e.hp<=0){
+        if(!e.dying)continue;
+        e.dieT+=dt; e.mesh.scale.setScalar(Math.max(.01,1-e.dieT*1.9));
+        if(e.dieT>.55&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
+        continue;
+      }
+      if(e.stage!==rogueRun.stage)continue;
+      const dx=player.position.x-e.mesh.position.x,dz=player.position.z-e.mesh.position.z,d=Math.hypot(dx,dz);
+      e.cooldown=Math.max(0,e.cooldown-dt);
+      if(d<22&&d>1.65){
+        const speed=e.kind==='crawler'?2.7:e.kind==='sentinel'?1.8:2.3;
+        const nx=e.mesh.position.x+dx/(d||1)*speed*dt,nz=e.mesh.position.z+dz/(d||1)*speed*dt;
+        if(isRogueWalkable(nx,nz,rogueRun.openGates)){e.mesh.position.x=nx;e.mesh.position.z=nz;e.mesh.position.y=rogueFloorHeight(nx,nz);}
+        e.mesh.rotation.y=Math.atan2(dx,dz);
+      }else if(d<=1.65&&e.cooldown<=0){
+        e.cooldown=e.kind==='sentinel'?1.8:1.35;
+        const damage=Math.max(1,3+e.stage-rogueMeta.armor-rogueRun.armorBonus);
+        damagePlayer(damage,dx/(d||1),dz/(d||1));
+      }
+    }
+    if(rogueRun.stage<3){
+      const live=rogueRun.enemies.some(e=>e.stage===rogueRun.stage&&e.hp>0);
+      if(!live){
+        const cleared=rogueRun.stage;
+        if(cleared===0){setRogueGateOpen(1);rogueRun.stage=1;showToast('封印門が開いた。左右の枝道も探索しよう。','区画突破');}
+        else if(cleared===1){setRogueGateOpen(2);rogueRun.stage=2;showToast('深層へ続く封印が解けた。','区画突破');}
+        else {setRogueGateOpen(3);rogueRun.stage=3;rogueRun.boss.mesh.visible=true;showToast('守護者が目を覚ました。','最深部');}
+      }
+    }else if(rogueRun.stage===3&&rogueRun.boss&&rogueRun.boss.hp>0){
+      const b=rogueRun.boss, dx=player.position.x-b.mesh.position.x, dz=player.position.z-b.mesh.position.z, d=Math.hypot(dx,dz);
+      b.cooldown=Math.max(0,b.cooldown-dt);
+      if(d<28&&d>3.3){const nx=b.mesh.position.x+dx/(d||1)*1.45*dt,nz=b.mesh.position.z+dz/(d||1)*1.45*dt;if(isRogueWalkable(nx,nz,rogueRun.openGates)){b.mesh.position.x=nx;b.mesh.position.z=nz;b.mesh.position.y=rogueFloorHeight(nx,nz);}b.mesh.rotation.y=Math.atan2(dx,dz);}
+      else if(d<=3.3&&b.cooldown<=0){b.cooldown=2.05;const damage=Math.max(2,7-rogueMeta.armor-rogueRun.armorBonus);damagePlayer(damage,dx/(d||1),dz/(d||1));}
+      b.mesh.position.y=rogueFloorHeight(b.mesh.position.x,b.mesh.position.z)+Math.sin(performance.now()*.003)*.08;
+    }else if(rogueRun.stage===3&&rogueRun.boss&&rogueRun.boss.hp<=0){
+      rogueRun.stage=4; rogueRun.shards+=12; rogueRun.extractReady=true;
+      const gate=caves[ROGUE_DUNGEON_INDEX].interiorScene.userData.rogueExtractionPortal;if(gate)gate.visible=true;
+      showToast('守護者を撃破。脱出門が開いた。欠片 +12','最深部突破');
+    }
+    updateRogueHud();
+  }
+  function constrainRogueDungeonPosition(pos){
+    if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
+    if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){rogueRun.lastPos={x:pos.x,z:pos.z};return;}
+    const last=rogueRun.lastPos||{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z};
+    if(isRogueWalkable(pos.x,last.z,rogueRun.openGates)){pos.z=last.z;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
+    if(isRogueWalkable(last.x,pos.z,rogueRun.openGates)){pos.x=last.x;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
+    pos.x=last.x;pos.z=last.z;
+  }
+  function leaveRogueDungeon(success,dead){
+    const idx=ROGUE_DUNGEON_INDEX,cave=caves[idx];
+    const carried=rogueRun?rogueRun.shards:0;
+    cave.interiorScene.remove(player); scene.add(player);
+    const ex=cave.mouth.x-cave.dir.x*Shared.CAVE_EXIT_RECESS, ez=cave.mouth.z-cave.dir.z*Shared.CAVE_EXIT_RECESS;
+    player.position.set(ex,islandHeight(ex,ez),ez); yaw=Math.atan2(-cave.dir.x,-cave.dir.z);
+    inCaveIndex=-1; activeScene=scene; camSnap=true; setCaveAudio(false);
+    playerHp=dead?PLAYER_MAX_HP:savedOutdoorHp; updatePlayerHpBar();
+    cleanupRogueRun();
+    if(success&&carried>0){rogueMeta.shards=Math.min(999999,rogueMeta.shards+carried);saveRogueMeta();showToast(`欠片 ${carried} を持ち帰った。恒久強化に使える。`,'生還');}
+    else if(dead) showToast(`冒険失敗。未精算の欠片 ${carried} と装備を失った。`,'ローグライク');
+    sfx.enterCave();
+  }
 
   function enterCave(idx){
     cancelPlacing(); // 設置モード中のゴーストが洞窟に持ち込まれないように
     const cave = caves[idx];
     savedOutdoorPos = player.position.clone();
     savedOutdoorYaw = yaw;
+    savedOutdoorHp = playerHp;
     scene.remove(player);
     cave.interiorScene.add(player);
     player.position.set(Shared.CAVE_INTERIOR_ENTRY.x, INTERIOR_FLOOR_Y, Shared.CAVE_INTERIOR_ENTRY.z); // 出口の門の手前に収まる位置
@@ -1589,15 +2036,13 @@ window.startGame = function(NETINIT){
     inCaveIndex = idx;
     activeScene = cave.interiorScene;
     camSnap = true;
-    if (idx === ROGUE_DUNGEON_CAVE_INDEX) startRogueliteRun();
     sfx.enterCave();
     setCaveAudio(true);
-    if (idx === ROGUE_DUNGEON_CAVE_INDEX && !isTouch) lockPointer();
+    if(cave.isRogueDungeon) startRogueRun();
   }
 
   function exitCave(){
-    const wasRogueDungeon = inCaveIndex === ROGUE_DUNGEON_CAVE_INDEX;
-    if (wasRogueDungeon) endRogueliteRun('撤退');
+    if(inCaveIndex===ROGUE_DUNGEON_INDEX){ leaveRogueDungeon(true,false); return; }
     const cave = caves[inCaveIndex];
     cave.interiorScene.remove(player);
     scene.add(player);
@@ -1610,11 +2055,11 @@ window.startGame = function(NETINIT){
     camSnap = true;
     sfx.enterCave();
     setCaveAudio(false);
-    if (wasRogueDungeon) showToast('ダンジョンから帰還した。獲得済みの深淵の欠片は保持される。','深淵');
   }
 
   // プレイヤーの足場の高さ(洞窟内は平らな床、屋外は地表)
   function getPlayerFloor(x, z){
+    if (inCaveIndex===ROGUE_DUNGEON_INDEX) return { y: rogueFloorHeight(x,z), inCave:true };
     if (inCaveIndex >= 0) return { y: INTERIOR_FLOOR_Y, inCave:true };
     return { y: islandHeight(x, z), inCave:false };
   }
@@ -2372,6 +2817,7 @@ window.startGame = function(NETINIT){
     const caveItemDefs = ITEM_DEFS.filter(d => d.biome === 'cave' || (d.extraBiomes && d.extraBiomes.includes('cave')));
     for (const cave of caves) cave.items = [];
     function putInCave(cave, def){
+      if (cave.isRogueDungeon) return;
       let x, z;
       if (def.deepCave){
         // 入口(出口リング)から離れた奥側(-z方向)に配置。さらに深部限定のものはより奥へ
@@ -2394,6 +2840,7 @@ window.startGame = function(NETINIT){
       const chance = def.caveChance !== undefined ? def.caveChance : 1;
       let placedAny = false;
       for (const cave of caves){
+        if (cave.isRogueDungeon) continue;
         if (Math.random() < chance){ putInCave(cave, def); placedAny = true; }
       }
       if (!placedAny && caves.length) putInCave(caves[Math.floor(Math.random()*caves.length)], def);
@@ -4353,416 +4800,6 @@ window.startGame = function(NETINIT){
 
   const ENEMY_MAKERS = { wolf:makeWolf, boar:makeBoar, lizard:makeRockLizard, crab:makeCrab, jelly:makeJellyfish, wolfClassic:makeWolfClassic, boarClassic:makeBoarClassic, raider:makeCampRaider, campGuard:makeCampGuard };
 
-  // ローグライト専用の進行データ。通常ワールドの所持品・セーブ・サーバー敵AIとは分離する。
-  function loadRogueMeta(){
-    const defaults={shards:0,attack:0,armor:0,speed:0};
-    try{
-      const raw=JSON.parse(localStorage.getItem(ROGUE_META_STORAGE_KEY)||'null');
-      if(!raw||typeof raw!=='object') return defaults;
-      return {
-        shards:Number.isFinite(raw.shards)?Math.max(0,Math.floor(raw.shards)):0,
-        attack:Number.isFinite(raw.attack)?Math.max(0,Math.min(3,Math.floor(raw.attack))):0,
-        armor:Number.isFinite(raw.armor)?Math.max(0,Math.min(3,Math.floor(raw.armor))):0,
-        speed:Number.isFinite(raw.speed)?Math.max(0,Math.min(3,Math.floor(raw.speed))):0,
-      };
-    }catch(_){return defaults;}
-  }
-  let rogueMeta=loadRogueMeta();
-  const rogueEnemies=[];
-  let rogueBoss=null;
-  let rogueRoomSolids=[];
-  let rogueRoomClearPending=false;
-  let rogueModalKind='';
-  const rogueModalEl=document.getElementById('rogueModal');
-  const rogueModalContent=document.getElementById('rogueModalContent');
-  const rogueStatusEl=document.getElementById('rogueStatus');
-  const rogueBossHudEl=document.getElementById('rogueBossHud');
-  const rogueBossFillEl=document.getElementById('rogueBossFill');
-  const rogueBossNameEl=document.getElementById('rogueBossName');
-
-  function saveRogueMeta(){
-    try{localStorage.setItem(ROGUE_META_STORAGE_KEY,JSON.stringify(rogueMeta));}catch(_){/* 保存不可環境でも今回の挑戦は続行する */}
-  }
-  function isRogueliteDungeon(){return inCaveIndex===ROGUE_DUNGEON_CAVE_INDEX;}
-  function rogueRandom(){return rogueRun&&typeof rogueRun.random==='function'?rogueRun.random():Math.random();}
-  function closeRogueModal(relock){
-    if(rogueModalEl) rogueModalEl.hidden=true;
-    rogueModalKind='';
-    if(relock!==false&&!isTouch&&!playerDead&&gameStarted&&!isMenuOpen()) lockPointer();
-  }
-  function openRogueModal(title,subtitle){
-    if(!rogueModalEl||!rogueModalContent) return null;
-    if(document.pointerLockElement) document.exitPointerLock();
-    rogueModalContent.replaceChildren();
-    const h=document.createElement('h2'); h.id='rogueModalTitle'; h.textContent=title; rogueModalContent.appendChild(h);
-    if(subtitle){const p=document.createElement('p');p.textContent=subtitle;rogueModalContent.appendChild(p);}
-    rogueModalEl.hidden=false;
-    return rogueModalContent;
-  }
-  function rogueButton(label,action,secondary){
-    const b=document.createElement('button'); b.type='button'; b.className='rogueActionBtn'+(secondary?' secondary':''); b.textContent=label;
-    b.addEventListener('click',action); return b;
-  }
-  function rogueCost(type){
-    const levels=rogueMeta[type]||0;
-    const prices={attack:[4,7,11],armor:[5,8,12],speed:[3,6,10]};
-    return (prices[type]||[])[levels]??Infinity;
-  }
-  function buyRogueMetaUpgrade(type){
-    const max= type==='speed'?3:3;
-    if(rogueMeta[type]>=max) return;
-    const cost=rogueCost(type);
-    if(rogueMeta.shards<cost) return;
-    rogueMeta.shards-=cost; rogueMeta[type]++; saveRogueMeta(); showRogueHub();
-  }
-  function showRogueHub(){
-    rogueModalKind='hub';
-    const root=openRogueModal('深淵の門','部屋ごとに姿を変える遺跡を進み、5部屋ごとに現れる守護者を倒す。部屋を突破して得た欠片は、倒れても恒久強化に使える。');
-    if(!root) return;
-    const metaLine=document.createElement('div');metaLine.className='rogueMetaLine';metaLine.textContent=`深淵の欠片：${rogueMeta.shards}　｜　恒久強化はこの端末に保存`;root.appendChild(metaLine);
-    const grid=document.createElement('div');grid.className='rogueCardGrid';root.appendChild(grid);
-    const shop=[
-      {id:'attack',title:'刃の刻印',desc:'ダンジョン内の攻撃ダメージを恒久的に +1。最大Lv.3。',max:3},
-      {id:'armor',title:'石肌の刻印',desc:'ダンジョン内で受けるダメージを恒久的に 1 軽減。最大Lv.3。',max:3},
-      {id:'speed',title:'風走りの刻印',desc:'ダンジョン内の移動速度を恒久的に 5% 上昇。最大Lv.3。',max:3},
-    ];
-    for(const item of shop){
-      const level=rogueMeta[item.id], cost=rogueCost(item.id), b=document.createElement('button');
-      b.type='button';b.className='rogueCard';
-      const strong=document.createElement('strong');strong.textContent=`${item.title}　Lv.${level}/${item.max}`;b.appendChild(strong);
-      const span=document.createElement('span');span.textContent=item.desc;b.appendChild(span);
-      const small=document.createElement('small');small.textContent=level>=item.max?'最大レベル':`必要な欠片：${cost}`;b.appendChild(small);
-      b.disabled=level>=item.max||rogueMeta.shards<cost;
-      b.addEventListener('click',()=>buyRogueMetaUpgrade(item.id));grid.appendChild(b);
-    }
-    const actions=document.createElement('div');actions.className='rogueActions';root.appendChild(actions);
-    actions.appendChild(rogueButton('ダンジョンに挑む',()=>{closeRogueModal(false);enterCave(ROGUE_DUNGEON_CAVE_INDEX);},false));
-    actions.appendChild(rogueButton('閉じる',()=>closeRogueModal(true),true));
-  }
-  function showRogueStatus(){
-    if(!rogueStatusEl) return;
-    if(!isRogueliteDungeon()||!rogueRun){rogueStatusEl.hidden=true;return;}
-    const bossText=rogueRun.isBossRoom?'　｜　守護者の間':'';
-    const state=rogueRun.awaitReward?'　｜　報酬を選択':rogueRun.portalActive?'　｜　門が開いた':'　｜　敵を全滅させろ';
-    const remaining=rogueEnemies.filter(e=>!e.dead).length+(rogueBoss&&!rogueBoss.dead?1:0);
-    rogueStatusEl.textContent=`深淵 ${rogueRun.room}層${bossText}　｜　敵 ${remaining}　｜　欠片 ${rogueMeta.shards}${state}`;
-    rogueStatusEl.hidden=false;
-  }
-  function showRogueBossHud(){
-    if(!rogueBossHudEl) return;
-    if(!isRogueliteDungeon()||!rogueBoss||rogueBoss.dead){rogueBossHudEl.hidden=true;return;}
-    rogueBossHudEl.hidden=false;
-    rogueBossNameEl.textContent=`深淵の守護者　${Math.ceil(rogueBoss.hp)} / ${rogueBoss.maxHp}`;
-    rogueBossFillEl.style.width=`${Math.max(0,rogueBoss.hp/rogueBoss.maxHp*100)}%`;
-  }
-  function disposeRogueObject(root){
-    if(!root)return;
-    const geometries=new Set(),materials=new Set(),textures=new Set();
-    root.traverse(o=>{
-      if(o.geometry)geometries.add(o.geometry);
-      const list=Array.isArray(o.material)?o.material:[o.material];
-      for(const mat of list){if(!mat)continue;materials.add(mat);if(mat.map)textures.add(mat.map);}
-    });
-    for(const tex of textures)tex.dispose();
-    for(const mat of materials)mat.dispose();
-    for(const geo of geometries)geo.dispose();
-  }
-  function disposeRogueVisuals(group){
-    if(!group) return;
-    group.traverse(o=>{if(o.geometry&&o.geometry.dispose)o.geometry.dispose();if(o.userData&&o.userData.rogueTransientMaterial&&o.material&&o.material.dispose)o.material.dispose();});
-    while(group.children.length) group.remove(group.children[0]);
-  }
-  function clearRogueEnemies(){
-    for(const e of rogueEnemies){
-      const mesh=e.mesh;
-      if(mesh.parent) mesh.parent.remove(mesh);
-      if(!e.visualDisposed)disposeRogueObject(mesh);
-      if(e.warn){if(e.warn.parent)e.warn.parent.remove(e.warn);if(!e.visualDisposed)disposeRogueObject(e.warn);}
-      e.visualDisposed=true;
-    }
-    rogueEnemies.length=0;
-    if(rogueBoss&&rogueBoss.mesh){const m=rogueBoss.mesh;if(m.parent)m.parent.remove(m);if(!rogueBoss.visualDisposed)disposeRogueObject(m);}
-    if(rogueBoss&&rogueBoss.warn){if(rogueBoss.warn.parent)rogueBoss.warn.parent.remove(rogueBoss.warn);if(!rogueBoss.visualDisposed)disposeRogueObject(rogueBoss.warn);}
-    rogueBoss=null;
-  }
-  function rogueSpawnPoint(minR,maxR){
-    for(let n=0;n<32;n++){
-      const a=rogueRandom()*Math.PI*2,r=minR+rogueRandom()*(maxR-minR);
-      const x=Math.cos(a)*r,z=Math.sin(a)*r;
-      if(Math.hypot(x,z-Shared.CAVE_INTERIOR_ENTRY.z)<4.4) continue;
-      if(Math.hypot(x,z+8.9)<3.4) continue;
-      if(rogueRoomSolids.some(s=>Math.hypot(x-s.x,z-s.z)<s.r+0.9)) continue;
-      return {x,z};
-    }
-    return {x:(rogueRandom()<0.5?-1:1)*6,z:-2+rogueRandom()*4};
-  }
-  function addRogueEnemy(kind,index,room){
-    const maker=ENEMY_MAKERS[kind]||makeWolf;
-    const id=100000+room*100+index;
-    const hp=Math.round(({wolf:7,boar:10,lizard:13,crab:8}[kind]||8)+Math.max(0,room-1)*1.65);
-    const spawn=rogueSpawnPoint(5.3,10.1);
-    const mesh=maker({id,kind,x:spawn.x,z:spawn.z,ry:0,hp,maxHp:hp,awake:1});
-    mesh.position.set(spawn.x,0,spawn.z); mesh.rotation.order='YXZ';
-    const hpBar=makeHpBarSprite(); hpBar.sprite.position.y=mesh.userData.eyeH?mesh.userData.eyeH+0.35:0.9; mesh.add(hpBar.sprite);
-    const warn=new THREE.Mesh(new THREE.RingGeometry(0.72,1,28),new THREE.MeshBasicMaterial({color:0xff5348,transparent:true,opacity:0.72,side:THREE.DoubleSide,depthWrite:false}));
-    warn.rotation.x=-Math.PI/2;warn.position.y=0.09;warn.visible=false; activeScene.add(warn);
-    const enemy={id,kind,mesh,hp,maxHp:hp,hitFlash:0,hpBar,hpBarTimer:0,moveSpeed:0,awake:true,atkT:0,ph:0,wp:0,stT:0,rotOffset:mesh.userData.rotOffset||0,dead:false,dying:false,dieT:0,cd:0.7+rogueRandom()*0.9,wind:0,warn,runSpeed:kind==='wolf'?2.7:kind==='boar'?2.0:kind==='lizard'?1.55:1.8,hurt:kind==='boar'?11:kind==='lizard'?9:7,attackRange:kind==='boar'?1.8:kind==='lizard'?2.0:1.45};
-    activeScene.add(mesh);rogueEnemies.push(enemy);return enemy;
-  }
-  function addRogueBoss(room){
-    const maker=GUARDIAN_MODELS[room%10===0?'brute':'stone']||makeGuardian;
-    const mesh=maker();const hp=72+Math.max(0,room-5)*11;
-    mesh.position.set(0,0,-2.7);mesh.scale.setScalar(room>=10?1.12:1.0);mesh.rotation.y=Math.PI;
-    activeScene.add(mesh);
-    const warn=new THREE.Mesh(new THREE.RingGeometry(0.8,1,40),new THREE.MeshBasicMaterial({color:0xff433f,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false}));
-    warn.rotation.x=-Math.PI/2;warn.position.set(0,0.11,-2.7);warn.visible=false;activeScene.add(warn);
-    rogueBoss={mesh,hp,maxHp:hp,dead:false,cd:1.2,wind:0,atkT:0,hitFlash:0,warn,homeX:0,homeZ:-2.7,walk:0,raise:0};
-  }
-  function makeRogueRoom(room){
-    const data=caves[ROGUE_DUNGEON_CAVE_INDEX].dungeon;
-    disposeRogueVisuals(data.roomRoot);
-    rogueRoomSolids=[];
-    const themes=[
-      {floor:0x30363a,stone:0x777970,dark:0x252a2e,glow:0x71d5cf,emit:0x1f736f},
-      {floor:0x34392f,stone:0x6d7860,dark:0x252a21,glow:0xb8d785,emit:0x4a6b27},
-      {floor:0x302b3d,stone:0x777080,dark:0x211e2c,glow:0xb6a0ff,emit:0x5b347a},
-    ];
-    const theme=themes[Math.floor(rogueRandom()*themes.length)];
-    data.floorMat.color.setHex(theme.floor);
-    data.roomMats.stone.color.setHex(theme.stone);data.roomMats.dark.color.setHex(theme.dark);
-    data.roomMats.stone.emissive.setHex(theme.emit);data.roomMats.stone.emissiveIntensity=0.12;
-    data.roomMats.glow.color.setHex(theme.glow);data.roomMats.glow.emissive.setHex(theme.emit);data.roomMats.glow.emissiveIntensity=0.9;
-    data.key.color.setHex(theme.glow);data.warm.color.setHex(room%5===0?0xff8064:0xffb16b);
-    const floorMark=new THREE.Mesh(new THREE.RingGeometry(4.4,4.52,48),new THREE.MeshBasicMaterial({color:theme.glow,transparent:true,opacity:0.33,side:THREE.DoubleSide}));
-    floorMark.rotation.x=-Math.PI/2;floorMark.position.y=0.055;floorMark.userData.rogueTransientMaterial=true;data.roomRoot.add(floorMark);
-    const innerMark=new THREE.Mesh(new THREE.RingGeometry(7.7,7.82,48),new THREE.MeshBasicMaterial({color:theme.glow,transparent:true,opacity:0.17,side:THREE.DoubleSide}));
-    innerMark.rotation.x=-Math.PI/2;innerMark.position.y=0.04;innerMark.userData.rogueTransientMaterial=true;data.roomRoot.add(innerMark);
-    // 各部屋で配置と形を変える低負荷の柱・結晶・崩れた石材。
-    const obstacleCount=4+Math.floor(rogueRandom()*3);
-    for(let i=0;i<obstacleCount;i++){
-      const a=(i/obstacleCount)*Math.PI*2+rogueRandom()*0.42,r=6.2+rogueRandom()*1.7;
-      const x=Math.cos(a)*r,z=Math.sin(a)*r;
-      const type=(i+room)%3;
-      let mesh;
-      if(type===0){
-        mesh=new THREE.Mesh(roughen(new THREE.CylinderGeometry(0.32,0.5,1.8+rogueRandom()*0.9,5),0.12),data.roomMats.stone);
-        mesh.position.set(x,mesh.geometry.parameters.height/2,z);mesh.rotation.z=(rogueRandom()-0.5)*0.12;
-        rogueRoomSolids.push({x,z,r:0.62});
-      }else if(type===1){
-        mesh=new THREE.Mesh(roughen(new THREE.IcosahedronGeometry(0.8+rogueRandom()*0.32,0),0.12),data.roomMats.dark);
-        mesh.scale.y=0.65;mesh.position.set(x,0.48,z);rogueRoomSolids.push({x,z,r:0.64});
-      }else{
-        mesh=new THREE.Mesh(new THREE.OctahedronGeometry(0.55+rogueRandom()*0.22,0),data.roomMats.glow);
-        mesh.scale.y=1.7;mesh.position.set(x,0.88,z);mesh.rotation.set(0.12,rogueRandom()*Math.PI,0.17);rogueRoomSolids.push({x,z,r:0.48});
-      }
-      mesh.castShadow=true;mesh.receiveShadow=true;data.roomRoot.add(mesh);
-      const base=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.64,0.12,6),data.roomMats.dark);base.position.set(x,0.06,z);data.roomRoot.add(base);
-    }
-    // 部屋の番号を示す小さな石板。文字テクスチャは使わず、低ポリ形状だけで描く。
-    const seal=new THREE.Mesh(new THREE.OctahedronGeometry(0.52,0),data.roomMats.glow);seal.position.set(0,2.15,0);seal.rotation.set(0.24,rogueRandom()*Math.PI,0.14);data.roomRoot.add(seal);
-    data.dummyRoom=room;
-    data.portalRoot.visible=false;
-    data.portalMat.emissiveIntensity=0.25;data.portalRingMat.emissiveIntensity=0.25;
-    if(room%5===0){
-      // ボス部屋の祭壇はプレイヤーの開始位置と次の門の動線を避ける。
-      for(let side of [-1,1]){
-        const p=new THREE.Mesh(new THREE.BoxGeometry(0.55,2.7,0.55),data.roomMats.dark);p.position.set(side*4.6,1.35,-3.4);p.rotation.z=side*0.08;data.roomRoot.add(p);
-      }
-    }
-  }
-  function startRogueliteRun(){
-    closeRogueModal(false); clearRogueEnemies();
-    let seed=(Math.random()*0xffffffff)>>>0;
-    const random=(()=>{let a=seed||1;return ()=>{a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};})();
-    rogueRun={room:1,random,attackBonus:0,armorBonus:0,speedBonus:0,healOnKill:0,secondWind:false,reviveUsed:false,awaitReward:false,portalActive:false,kills:0,roomsCleared:0,roomReward:0,isBossRoom:false};
-    playerHp=PLAYER_MAX_HP;playerInvuln=1.0;hurtKnock.x=0;hurtKnock.z=0;updatePlayerHpBar();
-    beginRogueRoom(1);showToast('深淵の挑戦が始まった。各層を突破して報酬を選べ。','ローグライト');
-  }
-  function beginRogueRoom(room){
-    if(!rogueRun||!isRogueliteDungeon())return;
-    closeRogueModal(false);clearRogueEnemies();rogueRun.room=room;rogueRun.awaitReward=false;rogueRun.portalActive=false;rogueRun.isBossRoom=room%5===0;rogueRun.roomReward=0;rogueRoomClearPending=false;
-    makeRogueRoom(room);
-    player.position.set(Shared.CAVE_INTERIOR_ENTRY.x,INTERIOR_FLOOR_Y,Shared.CAVE_INTERIOR_ENTRY.z);yaw=Math.PI;vy=0;grounded=true;camSnap=true;
-    const count=Math.min(8,2+Math.floor((room-1)*0.7));
-    const types=['wolf','boar','lizard','crab'];
-    for(let i=0;i<count;i++){
-      let kind;
-      const roll=rogueRandom();
-      if(room>=4&&roll>0.76)kind='lizard';else if(roll>0.48)kind='boar';else if(roll>0.24)kind='crab';else kind='wolf';
-      addRogueEnemy(kind,i,room);
-    }
-    if(rogueRun.isBossRoom)addRogueBoss(room);
-    showRogueStatus();showRogueBossHud();
-  }
-  function openRogueReward(){
-    if(!rogueRun||rogueRun.awaitReward||rogueRun.portalActive)return;
-    rogueRun.awaitReward=true;
-    const bonus=rogueRun.isBossRoom?4:0, earned=1+bonus;
-    rogueMeta.shards+=earned;saveRogueMeta();rogueRun.roomsCleared++;rogueRun.roomReward=earned;
-    const root=openRogueModal(`第${rogueRun.room}層 突破`,`深淵の欠片を ${earned} 個獲得した。次の層へ進む前に、今回の挑戦中だけ有効な強化をひとつ選ぶ。${rogueRun.isBossRoom?' 守護者を倒した報酬が含まれている。':''}`);
-    if(!root)return;
-    rogueModalKind='reward';
-    const grid=document.createElement('div');grid.className='rogueCardGrid';root.appendChild(grid);
-    const choices=[
-      {id:'edge',title:'研ぎ澄まされた刃',desc:'この挑戦中の攻撃ダメージ +1。',apply:()=>rogueRun.attackBonus++},
-      {id:'blood',title:'吸血の紋章',desc:'敵を倒すたび、HPを4回復する。',apply:()=>rogueRun.healOnKill+=4},
-      {id:'ward',title:'石肌の護符',desc:'この挑戦中、受けるダメージを1軽減する。',apply:()=>rogueRun.armorBonus++},
-      {id:'swift',title:'風走り',desc:'この挑戦中の移動速度 +12%。',apply:()=>rogueRun.speedBonus+=0.12},
-      {id:'heal',title:'回復の結晶',desc:'HPを35回復する。HPが減っていない時は効果なし。',apply:()=>{playerHp=Math.min(PLAYER_MAX_HP,playerHp+35);updatePlayerHpBar();}},
-      {id:'revive',title:'不死鳥の灰',desc:'この挑戦中、一度だけ致命傷を耐えてHP30で復帰。',apply:()=>rogueRun.secondWind=true},
-    ];
-    const pool=choices.slice();
-    for(let i=pool.length-1;i>0;i--){const j=Math.floor(rogueRandom()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-    for(const item of pool.slice(0,3)){
-      const b=document.createElement('button');b.type='button';b.className='rogueCard';
-      const strong=document.createElement('strong');strong.textContent=item.title;b.appendChild(strong);
-      const span=document.createElement('span');span.textContent=item.desc;b.appendChild(span);
-      const small=document.createElement('small');small.textContent='今回の挑戦限定';b.appendChild(small);
-      b.addEventListener('click',()=>{
-        if(!rogueRun||!rogueRun.awaitReward)return;
-        item.apply();rogueRun.awaitReward=false;rogueRun.portalActive=true;
-        const data=caves[ROGUE_DUNGEON_CAVE_INDEX].dungeon;
-        data.portalRoot.visible=true;data.portalMat.emissive.setHex(0x32d5c6);data.portalMat.emissiveIntensity=1.65;data.portalRingMat.emissive.setHex(0x86f1d8);data.portalRingMat.emissiveIntensity=1.7;
-        closeRogueModal(true);showRogueStatus();showToast(`${item.title}を得た。中央の門から次の層へ進める。`,'報酬');
-      });grid.appendChild(b);
-    }
-    showRogueStatus();
-  }
-  function checkRogueRoomClear(){
-    if(!rogueRun||rogueRun.awaitReward||rogueRun.portalActive||rogueRoomClearPending)return;
-    if(rogueEnemies.some(e=>!e.dead)|| (rogueBoss&&!rogueBoss.dead))return;
-    rogueRoomClearPending=true;openRogueReward();
-  }
-  function advanceRogueliteRoom(){
-    if(!rogueRun||!rogueRun.portalActive)return;
-    beginRogueRoom(rogueRun.room+1);
-    showToast(`第${rogueRun.room}層。敵を倒して出口を開けろ。`,'深淵');
-  }
-  function endRogueliteRun(reason){
-    if(rogueRun){
-      if(reason==='死亡') showToast(`第${rogueRun.room}層で倒れた。恒久欠片 ${rogueMeta.shards} 個は保持される。`,'挑戦終了');
-      else if(reason==='撤退') showToast(`第${rogueRun.room}層から撤退した。恒久欠片 ${rogueMeta.shards} 個は保持される。`,'挑戦終了');
-    }
-    closeRogueModal(false);clearRogueEnemies();rogueRun=null;rogueRoomClearPending=false;
-    if(rogueStatusEl)rogueStatusEl.hidden=true;if(rogueBossHudEl)rogueBossHudEl.hidden=true;
-    const data=caves[ROGUE_DUNGEON_CAVE_INDEX]&&caves[ROGUE_DUNGEON_CAVE_INDEX].dungeon;
-    if(data){data.portalRoot.visible=false;data.portalMat.emissiveIntensity=0.25;data.portalRingMat.emissiveIntensity=0.25;}
-  }
-  function rogueDamageEnemy(enemy,amount){
-    if(!rogueRun||!enemy||enemy.dead||enemy.dying)return;
-    enemy.hp=Math.max(0,enemy.hp-amount);enemy.hitFlash=0.2;enemy.hpBarTimer=2.2;updateEnemyHpBar(enemy);
-    spawnHitParticles(new THREE.Vector3(enemy.mesh.position.x,enemy.mesh.position.y+0.65,enemy.mesh.position.z));
-    spawnDamagePopup(new THREE.Vector3(enemy.mesh.position.x,enemy.mesh.position.y+1.15,enemy.mesh.position.z),amount);
-    if(enemy.hp<=0){
-      enemy.dying=true;enemy.dieT=0;enemy.dead=true;enemy.warn.visible=false;rogueRun.kills++;
-      if(rogueRun.healOnKill>0){playerHp=Math.min(PLAYER_MAX_HP,playerHp+rogueRun.healOnKill);updatePlayerHpBar();}
-    }
-    showRogueStatus();
-  }
-  function rogueDamageBoss(amount){
-    if(!rogueRun||!rogueBoss||rogueBoss.dead)return;
-    rogueBoss.hp=Math.max(0,rogueBoss.hp-amount);rogueBoss.hitFlash=0.18;spawnHitParticles(new THREE.Vector3(rogueBoss.mesh.position.x,rogueBoss.mesh.position.y+1.7,rogueBoss.mesh.position.z),0xb8a0ff);
-    spawnDamagePopup(new THREE.Vector3(rogueBoss.mesh.position.x,rogueBoss.mesh.position.y+2.3,rogueBoss.mesh.position.z),amount);
-    if(rogueBoss.hp<=0){
-      rogueBoss.dead=true;rogueBoss.dieT=0;rogueBoss.warn.visible=false;
-      for(let i=0;i<8;i++){const a=i*Math.PI/4;spawnHitParticles(new THREE.Vector3(rogueBoss.mesh.position.x+Math.cos(a)*1.4,1.1+(i%3)*0.45,rogueBoss.mesh.position.z+Math.sin(a)*1.4),0xb8a0ff);}
-      showToast('深淵の守護者を倒した。','ボス撃破');
-    }
-    showRogueBossHud();showRogueStatus();
-  }
-  function performRogueAttackHit(){
-    if(!rogueRun||rogueRun.awaitReward)return;
-    const dash=!!dashAttackActive,range=dash?3.6:2.7;
-    const dmg=(dash?2:1)+(attackBuffTimer>0?1:0)+(swordLv>=2?1:0)+rogueMeta.attack+rogueRun.attackBonus;
-    const fx=new THREE.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
-    for(const en of rogueEnemies){
-      if(en.dead||en.dying)continue;
-      const dx=en.mesh.position.x-player.position.x,dz=en.mesh.position.z-player.position.z,d=Math.hypot(dx,dz);
-      if(d>range)continue;
-      if((dx*fx.x+dz*fx.z)/(d||1)>0.1)rogueDamageEnemy(en,dmg);
-    }
-    if(rogueBoss&&!rogueBoss.dead){
-      const dx=rogueBoss.mesh.position.x-player.position.x,dz=rogueBoss.mesh.position.z-player.position.z,d=Math.hypot(dx,dz);
-      if(d<range+1.8&&((dx*fx.x+dz*fx.z)/(d||1)>0.1||d<2.5))rogueDamageBoss(dmg);
-    }
-    checkRogueRoomClear();
-  }
-  function resolveRogueRoomSolids(){
-    if(!rogueRun||!isRogueliteDungeon())return;
-    const p=player.position,r=0.42;
-    for(const s of rogueRoomSolids){
-      const dx=p.x-s.x,dz=p.z-s.z,d=Math.hypot(dx,dz),need=s.r+r;
-      if(d>=need)continue;
-      const nx=d>1e-6?dx/d:1,nz=d>1e-6?dz/d:0;
-      p.x=s.x+nx*need;p.z=s.z+nz*need;
-    }
-  }
-  function updateRogueDungeon(dt){
-    if(!isRogueliteDungeon())return;
-    const run=rogueRun;if(!run){showRogueStatus();showRogueBossHud();return;}
-    if(playerDead)return;
-    const t=performance.now()/1000;
-    // 敵の接近・予備動作・攻撃。サーバー側の島の敵には一切命令しない。
-    for(const en of rogueEnemies){
-      const m=en.mesh;
-      if(en.dying){
-        en.dieT+=dt;m.scale.setScalar(Math.max(0.001,1-en.dieT*2.1));
-        if(en.dieT>0.48&&!en.visualDisposed){if(m.parent)m.parent.remove(m);disposeRogueObject(m);if(en.warn.parent)en.warn.parent.remove(en.warn);disposeRogueObject(en.warn);en.visualDisposed=true;en.dying=false;}
-        continue;
-      }
-      if(en.dead)continue;
-      if(en.hitFlash>0)en.hitFlash=Math.max(0,en.hitFlash-dt);
-      if(en.hpBarTimer>0){en.hpBarTimer-=dt;if(en.hpBarTimer<=0)en.hpBar.sprite.visible=false;}
-      en.cd=Math.max(0,en.cd-dt);en.atkT=Math.max(0,en.atkT-dt);
-      const dx=player.position.x-m.position.x,dz=player.position.z-m.position.z,d=Math.hypot(dx,dz)||1;
-      m.rotation.y=Math.atan2(dx,dz)+(en.rotOffset||0);
-      if(en.wind>0){
-        en.wind-=dt;en.ph=1;en.wp=1-Math.max(0,en.wind)/0.58;en.stT=0.58-en.wind;en.moveSpeed=0;
-        en.warn.visible=true;en.warn.position.set(m.position.x,0.09,m.position.z);en.warn.scale.setScalar(en.attackRange*0.95);
-        if(en.wind<=0){en.ph=2;en.warn.visible=false;en.atkT=0.18;
-          const d2=Math.hypot(player.position.x-m.position.x,player.position.z-m.position.z);
-          if(d2<en.attackRange+0.25){const nx=(player.position.x-m.position.x)/(d2||1),nz=(player.position.z-m.position.z)/(d2||1);damagePlayer(en.hurt+Math.floor(run.room/4),nx,nz);}
-          en.cd=1.0+rogueRandom()*0.7;
-        }
-      }else{
-        en.ph=0;en.wp=0;en.stT=0;
-        if(d>en.attackRange*0.88){const step=Math.min(en.runSpeed*dt,Math.max(0,d-en.attackRange*0.75));m.position.x+=dx/d*step;m.position.z+=dz/d*step;en.moveSpeed=step/Math.max(dt,0.001);}
-        else{en.moveSpeed=0;if(en.cd<=0){en.wind=0.58;en.ph=1;}}
-      }
-      if(m.userData.anim)m.userData.anim(t,en,dt);
-      if(en.hitFlash>0){m.rotation.z=Math.sin(t*48)*0.035;}
-      if(en.hpBar&&en.hpBar.sprite.visible)en.hpBar.sprite.position.y=m.userData.eyeH?m.userData.eyeH+0.35:0.9;
-    }
-    if(rogueBoss&&rogueBoss.dead&&!rogueBoss.visualDisposed){
-      rogueBoss.dieT=(rogueBoss.dieT||0)+dt;rogueBoss.mesh.scale.multiplyScalar(Math.max(0.01,1-dt*1.6));
-      if(rogueBoss.dieT>0.62){if(rogueBoss.mesh.parent)rogueBoss.mesh.parent.remove(rogueBoss.mesh);disposeRogueObject(rogueBoss.mesh);if(rogueBoss.warn.parent)rogueBoss.warn.parent.remove(rogueBoss.warn);disposeRogueObject(rogueBoss.warn);rogueBoss.visualDisposed=true;}
-    }
-    if(rogueBoss&&!rogueBoss.dead){
-      const b=rogueBoss,m=b.mesh,dx=player.position.x-m.position.x,dz=player.position.z-m.position.z,d=Math.hypot(dx,dz)||1;
-      m.rotation.y=Math.atan2(dx,dz);b.cd=Math.max(0,b.cd-dt);
-      b.walk+=dt*(d>3?5:1.4);
-      if(b.wind>0){
-        b.wind-=dt;b.raise=Math.min(1,b.raise+dt*1.8);b.warn.visible=true;b.warn.position.set(m.position.x,0.11,m.position.z);b.warn.scale.setScalar(4.0);
-        m.position.y=0.05+Math.sin(b.walk)*0.04;
-        if(b.wind<=0){
-          b.warn.visible=false;b.raise=0;b.atkT=0.32;
-          if(d<4.2){const nx=dx/d,nz=dz/d;damagePlayer(17+Math.floor(run.room/5)*2,nx,nz);}
-          b.cd=1.6+Math.random()*0.4;spawnShockwave(m.position.x,0.1,m.position.z,4.4);
-        }
-      }else{
-        if(d>3.3){const step=Math.min((run.room>=10?2.2:1.8)*dt,d-2.5);m.position.x+=dx/d*step;m.position.z+=dz/d*step;}
-        m.position.y=0.03+Math.sin(b.walk*0.8)*0.035;
-        if(b.cd<=0){b.wind=0.95;b.raise=0;}
-      }
-      if(b.hitFlash>0){b.hitFlash-=dt;}
-      const parts=m.userData.parts;
-      if(parts&&parts.arms){const lift=b.wind>0?Math.min(1,(0.95-b.wind)/0.55):0;for(const arm of parts.arms)if(arm)arm.rotation.x=-lift*0.8;}
-      showRogueBossHud();
-    }
-    if(run.portalActive){const data=caves[ROGUE_DUNGEON_CAVE_INDEX].dungeon;const pulse=1.2+0.35*Math.sin(t*3.1);data.portalMat.emissiveIntensity=pulse;data.portalRingMat.emissiveIntensity=1.0+0.65*Math.sin(t*2.2);data.portalRing.rotation.z=Math.sin(t*0.9)*0.04;}
-    checkRogueRoomClear();showRogueStatus();
-  }
-
   const enemies = [];
 
   function makeHpBarSprite(){
@@ -5455,14 +5492,7 @@ window.startGame = function(NETINIT){
   const hurtFlashEl = document.getElementById('hurtFlash');
   function damagePlayer(amount, dirX, dirZ){ // dirX/dirZ: 攻撃してきた側から自分へ向かう単位ベクトル(分かる場合)
     if (playerDead || playerInvuln > 0) return;
-    let incoming = amount;
-    if (isRogueliteDungeon() && rogueRun) incoming = Math.max(1, incoming - rogueMeta.armor - rogueRun.armorBonus);
-    if (isRogueliteDungeon() && rogueRun && rogueRun.secondWind && !rogueRun.reviveUsed && playerHp - incoming <= 0){
-      rogueRun.reviveUsed = true; playerHp = 30; playerInvuln = 1.6;
-      showToast('不死鳥の灰が砕け、HP30で踏みとどまった。','復活');
-      updatePlayerHpBar(); return;
-    }
-    playerHp = Math.max(0, playerHp - incoming);
+    playerHp = Math.max(0, playerHp - amount);
     playerInvuln = 0.6;
     camShake = Math.max(camShake, 0.22);
     if (typeof dirX === 'number' && typeof dirZ === 'number'){
@@ -5478,28 +5508,29 @@ window.startGame = function(NETINIT){
     if (playerDead) return;
     playerDead = true;
     closeStructureActionMenu(false);
+    document.querySelector('#deathOverlay h1').textContent = inCaveIndex===ROGUE_DUNGEON_INDEX ? '冒険失敗' : '倒れた…';
+    document.getElementById('deathSummary').textContent = inCaveIndex===ROGUE_DUNGEON_INDEX ? '未精算の欠片と装備を失う。目を覚ますと島へ戻る。' : 'もう一度、島で目を覚ます。';
     document.getElementById('deathOverlay').classList.add('show');
     if (document.pointerLockElement) document.exitPointerLock();
   }
 
   function respawnPlayer(){
+    const diedInRogueDungeon=inCaveIndex===ROGUE_DUNGEON_INDEX;
+    if(diedInRogueDungeon) leaveRogueDungeon(false,true);
     playerHp = PLAYER_MAX_HP;
     playerDead = false;
     playerInvuln = 1.2;
-    if (isRogueliteDungeon()){
-      // 挑戦失敗後は入口まで戻し、サーバー検証を通してから通常ワールドへ退出させる。
-      endRogueliteRun('死亡');
-      player.position.set(Shared.CAVE_INTERIOR_EXIT.x,INTERIOR_FLOOR_Y,Shared.CAVE_INTERIOR_EXIT.z);
-      activeScene=caves[ROGUE_DUNGEON_CAVE_INDEX].interiorScene;camSnap=true;yaw=Math.PI;
-    }else{
+    if(!diedInRogueDungeon){
       player.position.set(SPAWN_POS.x, getPlayerFloor(SPAWN_POS.x, SPAWN_POS.z).y, SPAWN_POS.z);
-      inCaveIndex = -1;activeScene=scene;
+      if(player.parent!==scene){ if(player.parent)player.parent.remove(player); scene.add(player); }
+      inCaveIndex = -1; activeScene=scene;
     }
     vy = 0; grounded = true;
     hurtKnock.x = hurtKnock.z = 0;
     updatePlayerHpBar();
     document.getElementById('deathOverlay').classList.remove('show');
-    if (isRogueliteDungeon()) showToast('挑戦失敗。入口の門で E を押すと島へ戻れる。','深淵');
+    document.querySelector('#deathOverlay h1').textContent='倒れた…';
+    document.getElementById('deathSummary').textContent='もう一度、島で目を覚ます。';
     if (!isTouch) lockPointer();
   }
   document.getElementById('respawnBtn').addEventListener('click', respawnPlayer);
@@ -5693,8 +5724,33 @@ window.startGame = function(NETINIT){
   }
 
   function performAttackHit(){
-    if (isRogueliteDungeon()) { performRogueAttackHit(); return; }
-    if (inCaveIndex >= 0) return; // 通常洞窟内に敵はいない
+    if(inCaveIndex===ROGUE_DUNGEON_INDEX&&rogueRun&&rogueRun.active){
+      const range=dashAttackActive?3.6:2.7;
+      const dmg=(dashAttackActive?2:1)+(attackBuffTimer>0?1:0)+(swordLv>=2?1:0)+rogueMeta.attack+rogueRun.weaponBonus;
+      const facing=new THREE.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
+      let hitAny=false;
+      const hitTarget=(target)=>{
+        if(!target||target.hp<=0||target.dying)return false;
+        const dx=target.mesh.position.x-player.position.x,dz=target.mesh.position.z-player.position.z,d=Math.hypot(dx,dz);
+        if(d>range+(target.boss?1.8:0))return false;
+        const dot=(dx*facing.x+dz*facing.z)/(d||1);
+        if(dot<=0.05&&d>1.7)return false;
+        target.hp=Math.max(0,target.hp-dmg); target.flash=.18; target.mesh.scale.setScalar(target.boss?1.08:1.12);
+        if(target.hp<=0){
+          target.dying=true;target.dieT=0;
+          if(target.boss){
+            target.mesh.scale.setScalar(1.08);
+          }else{ rogueRun.shards+=1+Math.floor(Math.random()*3); }
+          spawnHitParticles(new THREE.Vector3(target.mesh.position.x,target.mesh.position.y+1,target.mesh.position.z),0x91e7ef);
+        }
+        return true;
+      };
+      for(const en of rogueRun.enemies){if(en.stage===rogueRun.stage&&hitTarget(en))hitAny=true;}
+      if(rogueRun.stage===3&&rogueRun.boss&&hitTarget(rogueRun.boss))hitAny=true;
+      if(hitAny){hitStop=dashAttackActive ? .09 : .055;camShake=Math.max(camShake,dashAttackActive ? .32 : .2);sfx.hit(false);updateRogueHud();}
+      return;
+    }
+    if (inCaveIndex >= 0) return; // 通常洞窟では戦闘しない
     // ヒット判定: プレイヤーの正面、近距離の敵(剣が最も伸びる瞬間に判定)。実際のダメージ処理はサーバー
     // ダッシュ攻撃は踏み込む分、範囲と威力を上げる
     const range = dashAttackActive ? 3.6 : 2.7;
@@ -6346,7 +6402,7 @@ window.startGame = function(NETINIT){
   function isMenuOpen(){
     return buildMenu.classList.contains('show') || codexMenu.classList.contains('show') ||
       settingsMenu.classList.contains('show') || structureActionMenu.classList.contains('show') ||
-      bulkRecoverMenu.classList.contains('show') || bulkRecoverWorldSelectMode;
+      bulkRecoverMenu.classList.contains('show') || bulkRecoverWorldSelectMode || rogueMetaPanel.classList.contains('show');
   }
 
   function findRecoverableStructure(sid){
@@ -7029,8 +7085,10 @@ window.startGame = function(NETINIT){
       }
       constrainGrottoRoof(pos);
       resolveFenceCollision(pos, 0.35);
+    } else if(inCaveIndex===ROGUE_DUNGEON_INDEX){
+      constrainRogueDungeonPosition(pos);
     } else {
-      // 洞窟の中は部屋の範囲から出られない(壁・飾りの外へ抜けないように)
+      // 通常洞窟は従来どおり半径13.5mの範囲を維持。
       const d = Math.hypot(pos.x, pos.z);
       if (d > CAVE_ROOM_R){ pos.x *= CAVE_ROOM_R/d; pos.z *= CAVE_ROOM_R/d; }
     }
@@ -7041,7 +7099,7 @@ window.startGame = function(NETINIT){
     if (playerInvuln > 0) playerInvuln -= dt;
     if (playerDead) return; // 倒れている間は操作停止(リスポーンボタン待ち)
     // 一括回収のワールド選択中も移動・ジャンプは使える。通常メニューでは従来どおり入力を止める。
-    const inputOn = ((!isMenuOpen() && (!rogueModalEl || rogueModalEl.hidden)) || bulkRecoverWorldSelectMode);
+    const inputOn = !isMenuOpen() || bulkRecoverWorldSelectMode;
 
     const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const right = new THREE.Vector3(Math.sin(yaw-Math.PI/2), 0, Math.cos(yaw-Math.PI/2));
@@ -7070,8 +7128,7 @@ window.startGame = function(NETINIT){
       if (moveLen > 1) move.normalize();
       const touchMag = Math.hypot(touchMove.x, touchMove.y);
       sprinting = keys['ShiftLeft'] || keys['ShiftRight'] || touchMag > 0.9;
-      const rogueSpeed = isRogueliteDungeon() && rogueRun ? 1 + rogueMeta.speed*0.05 + rogueRun.speedBonus : 1;
-      const speed = SPEED * (sprinting ? SPRINT_MULT : 1) * (speedBuffTimer > 0 ? 1.3 : 1) * rogueSpeed;
+      const speed = SPEED * (sprinting ? SPRINT_MULT : 1) * (speedBuffTimer > 0 ? 1.3 : 1);
       moveWithFenceCollision(player.position, move.x * speed * dt, move.z * speed * dt, 0.35);
       const targetRotY = Math.atan2(move.x, move.z);
       // 滑らかに向きを合わせる
@@ -7190,6 +7247,8 @@ window.startGame = function(NETINIT){
         player.position.x *= k;
         player.position.z *= k;
       }
+    } else if(inCaveIndex===ROGUE_DUNGEON_INDEX){
+      constrainRogueDungeonPosition(player.position);
     } else {
       const roomR = Shared.CAVE_ROOM_RADIUS;
       const d = Math.hypot(player.position.x, player.position.z);
@@ -7199,7 +7258,6 @@ window.startGame = function(NETINIT){
         player.position.z *= k;
       }
     }
-    if (isRogueliteDungeon()) resolveRogueRoomSolids();
 
     // --- 収集アイテム(古代の欠片・図鑑アイテム)の演出(回転・浮遊) ---
     updateCollectionItemFx(dt);
@@ -7229,7 +7287,7 @@ window.startGame = function(NETINIT){
       for (let i=0;i<caves.length;i++){
         const e = caves[i].mouth;
         const d = Math.hypot(e.x - player.position.x, e.z - player.position.z);
-        if (d < nearestD){ nearestD = d; nearest = { kind:i===ROGUE_DUNGEON_CAVE_INDEX?'rogueEntrance':'enterCave', caveIndex:i }; }
+        if (d < nearestD){ nearestD = d; nearest = { kind:'enterCave', caveIndex:i }; }
       }
       let nearestRecoverable = null, nearestRecoverableD = STRUCTURE_ACTION_RANGE;
       for (const s of placedStructures){
@@ -7255,25 +7313,34 @@ window.startGame = function(NETINIT){
         const d = Math.hypot(ch.x - player.position.x, ch.z - player.position.z);
         if (d < nearestD){ nearestD = d; nearest = { kind:'chest', ref:ch }; }
       }
+    } else if(inCaveIndex===ROGUE_DUNGEON_INDEX&&rogueRun){
+      for(const chest of rogueRun.chests){
+        if(chest.opened)continue;
+        const d=Math.hypot(chest.x-player.position.x,chest.z-player.position.z);
+        if(d<nearestD){nearestD=d;nearest={kind:'rogueChest',ref:chest};}
+      }
+      const ex=caves[inCaveIndex].exitLocal;
+      const exitD=Math.hypot(ex.x-player.position.x,ex.z-player.position.z);
+      if(exitD<nearestD){nearestD=exitD;nearest={kind:rogueReturn};}
+      const altar=caves[inCaveIndex].interiorScene.userData.rogueAltar;
+      const altarD=Math.hypot(altar.x-player.position.x,altar.z-player.position.z);
+      if(altarD<nearestD){nearestD=altarD;nearest={kind:'rogueUpgrade'};}
+      if(rogueRun.extractReady){
+        const extractD=Math.hypot(player.position.x,player.position.z+201);
+        if(extractD<nearestD){nearestD=extractD;nearest={kind:'rogueExtraction'};}
+      }
     } else {
       const cave = caves[inCaveIndex];
-      if (isRogueliteDungeon()){
-        if (rogueRun && rogueRun.portalActive){
-          const d = Math.hypot(player.position.x, player.position.z + 8.9);
-          if (d < nearestD){nearestD=d;nearest={kind:'rogueNextRoom'};}
-        }
-      } else {
-        for (const c of cave.ore){
-          if (!c.alive) continue;
-          const d = Math.hypot(c.mesh.position.x - player.position.x, c.mesh.position.z - player.position.z);
-          if (d < nearestD){ nearestD = d; nearest = { kind:'collect', type:'crystal', ref:c }; }
-        }
-        if (cave.items){
-          for (const it of cave.items){
-            if (!it.alive) continue;
-            const d = Math.hypot(it.mesh.position.x - player.position.x, it.mesh.position.z - player.position.z);
-            if (d < nearestD){ nearestD = d; nearest = { kind:'collect', type:it.type, ref:it }; }
-          }
+      for (const c of cave.ore){
+        if (!c.alive) continue;
+        const d = Math.hypot(c.mesh.position.x - player.position.x, c.mesh.position.z - player.position.z);
+        if (d < nearestD){ nearestD = d; nearest = { kind:'collect', type:'crystal', ref:c }; }
+      }
+      if (cave.items){
+        for (const it of cave.items){
+          if (!it.alive) continue;
+          const d = Math.hypot(it.mesh.position.x - player.position.x, it.mesh.position.z - player.position.z);
+          if (d < nearestD){ nearestD = d; nearest = { kind:'collect', type:it.type, ref:it }; }
         }
       }
       const ex = cave.exitLocal;
@@ -7293,11 +7360,15 @@ window.startGame = function(NETINIT){
           : '薬草';
         promptText = (isTouch ? 'GET' : 'E') + `で${label}を採集`;
       } else if (nearest.kind === 'enterCave'){
-        promptText = (isTouch ? 'GET' : 'E') + 'で洞窟に入る';
-      } else if (nearest.kind === 'rogueEntrance'){
-        promptText = (isTouch ? 'GET' : 'E') + 'で深淵の門を調べる';
-      } else if (nearest.kind === 'rogueNextRoom'){
-        promptText = (isTouch ? 'GET' : 'E') + 'で次の層へ進む';
+        promptText = nearest.caveIndex===ROGUE_DUNGEON_INDEX ? (isTouch ? 'GET' : 'E') + 'で遺跡ダンジョンへ' : (isTouch ? 'GET' : 'E') + 'で洞窟に入る';
+      } else if(nearest.kind==='rogueChest'){
+        promptText=(isTouch?'GET':'E')+'で宝箱を開ける';
+      } else if(nearest.kind==='rogueUpgrade'){
+        promptText=(isTouch?'GET':'E')+'で恒久強化を確認';
+      } else if(nearest.kind==='rogueReturn'){
+        promptText=(isTouch?'GET':'E')+'で島へ戻る（欠片を精算）';
+      } else if(nearest.kind==='rogueExtraction'){
+        promptText=(isTouch?'GET':'E')+'で生還する（欠片を精算）';
       } else if (nearest.kind === 'sleepAtHut'){
         promptText = (isTouch ? 'GET' : 'E') + (playerHp >= PLAYER_MAX_HP ? 'で小屋で休む' : 'で小屋で眠って回復');
       } else if (nearest.kind === 'gate'){
@@ -7329,13 +7400,15 @@ window.startGame = function(NETINIT){
       if (!n) return;
       if (n.kind === 'collect'){
         requestTake(n.ref, n.type);
-      } else if (n.kind === 'enterCave'){
+            } else if (n.kind === 'enterCave'){
         enterCave(n.caveIndex);
-      } else if (n.kind === 'rogueEntrance'){
-        showRogueHub();
-      } else if (n.kind === 'rogueNextRoom'){
-        advanceRogueliteRoom();
       } else if (n.kind === 'exitCave'){
+        exitCave();
+      } else if(n.kind==='rogueChest'){
+        openRogueChest(n.ref);
+      } else if(n.kind==='rogueUpgrade'){
+        openRogueMetaPanel();
+      } else if(n.kind==='rogueReturn'||n.kind==='rogueExtraction'){
         exitCave();
       } else if (n.kind === 'sleepAtHut'){
         if (playerHp < PLAYER_MAX_HP){
@@ -7512,6 +7585,31 @@ window.startGame = function(NETINIT){
   const MM_CAVE_REVEAL_DIST = 30, MM_RUIN_HINT_DIST = 45;
   function drawMinimap(){
     mmCtx.clearRect(0,0,120,120);
+    if(inCaveIndex===ROGUE_DUNGEON_INDEX&&rogueRun){
+      mmCtx.fillStyle='rgba(8,12,19,.88)'; mmCtx.fillRect(0,0,120,120);
+      const mx=x=>60+x*.48, my=z=>14+(24-z)*.40;
+      mmCtx.lineCap='round'; mmCtx.lineJoin='round';
+      mmCtx.strokeStyle='rgba(125,145,153,.72)'; mmCtx.lineWidth=4;
+      for(const a of ROGUE_WALK_AREAS){
+        if(a.type==='ellipse'){
+          mmCtx.beginPath(); mmCtx.ellipse(mx(a.x),my(a.z),a.rx*.48,a.rz*.40,0,0,Math.PI*2); mmCtx.stroke();
+        }else{mmCtx.beginPath();mmCtx.moveTo(mx(a.ax),my(a.az));mmCtx.lineTo(mx(a.bx),my(a.bz));mmCtx.stroke();}
+      }
+      // 黒い横線は大亀裂。中央橋と東の細い橋だけが通過可能。
+      mmCtx.strokeStyle='rgba(5,8,11,.95)';mmCtx.lineWidth=3.3;mmCtx.beginPath();mmCtx.moveTo(mx(-28),my(-83));mmCtx.lineTo(mx(28),my(-83));mmCtx.stroke();
+      mmCtx.strokeStyle='#b7a87c';mmCtx.lineWidth=1.4;for(const bx of [0,15]){mmCtx.beginPath();mmCtx.moveTo(mx(bx),my(-90.5));mmCtx.lineTo(mx(bx),my(-75.5));mmCtx.stroke();}
+      for(let i=rogueRun.openGates;i<ROGUE_GATE_Z.length;i++){
+        mmCtx.strokeStyle='#bb6970';mmCtx.lineWidth=2;mmCtx.beginPath();mmCtx.moveTo(mx(-5),my(ROGUE_GATE_Z[i]));mmCtx.lineTo(mx(5),my(ROGUE_GATE_Z[i]));mmCtx.stroke();
+      }
+      mmCtx.fillStyle='#d9b979';
+      for(const c of rogueRun.chests){if(!c.opened){mmCtx.fillRect(mx(c.x)-1.6,my(c.z)-1.6,3.2,3.2);}}
+      mmCtx.fillStyle='#ff695b';
+      for(const e of rogueRun.enemies){if(e.hp>0&&e.stage===rogueRun.stage) {mmCtx.beginPath();mmCtx.arc(mx(e.mesh.position.x),my(e.mesh.position.z),1.7,0,Math.PI*2);mmCtx.fill();}}
+      if(rogueRun.boss&&rogueRun.stage>=3&&rogueRun.boss.hp>0){mmCtx.fillStyle='#d38cff';mmCtx.beginPath();mmCtx.arc(mx(rogueRun.boss.mesh.position.x),my(rogueRun.boss.mesh.position.z),3,0,Math.PI*2);mmCtx.fill();}
+      mmCtx.fillStyle='#8ce7eb';mmCtx.beginPath();mmCtx.arc(mx(player.position.x),my(player.position.z),2.4,0,Math.PI*2);mmCtx.fill();
+      mmCtx.strokeStyle='rgba(230,238,240,.7)';mmCtx.lineWidth=1;mmCtx.strokeRect(.5,.5,119,119);
+      return;
+    }
     // 島の大まかな範囲
     mmCtx.fillStyle = 'rgba(120,150,110,0.5)';
     mmCtx.beginPath();
@@ -7893,8 +7991,6 @@ window.startGame = function(NETINIT){
         r.init = true;
       }
       const g = r.group;
-      // ローグライトはプレイヤーごとの独立インスタンス。別の挑戦中の人を別部屋へ誤表示しない。
-      g.visible = !(isRogueliteDungeon() && r.cave === ROGUE_DUNGEON_CAVE_INDEX);
       // 前フレームのエモートの姿勢を残さず、通常姿勢から毎フレーム再計算する。
       r.armL.rotation.z = 0; r.armR.rotation.z = 0;
       r.torso.rotation.x = 0; r.torso.rotation.y = 0; r.torso.rotation.z = 0;
@@ -8768,6 +8864,7 @@ window.startGame = function(NETINIT){
         const lungeSpeed = 13;
         // 攻撃の踏み込みも通常移動と同じ柵衝突を通す(旧実装ではこの経路だけ衝突判定を迂回していた)。
         moveWithFenceCollision(player.position, dashAttackDirX * lungeSpeed * dt, dashAttackDirZ * lungeSpeed * dt, 0.35);
+        if(inCaveIndex===ROGUE_DUNGEON_INDEX) constrainRogueDungeonPosition(player.position);
         if (grounded){
           player.position.y = getPlayerFloor(player.position.x, player.position.z).y;
         }
@@ -8808,8 +8905,6 @@ window.startGame = function(NETINIT){
       player, collectibles, collectibleByKey, remotes, enemyById, placedStructures, chests, caves, inv,
       heldStructures, BUILDABLES, scene, tryInteract, performAttackHit, startPlacing, confirmPlacing,
       get placing(){ return placing; }, get inCaveIndex(){ return inCaveIndex; }, get playerHp(){ return playerHp; }, handleNet, showToast, attack, enterCave,
-      get rogueRun(){ return rogueRun ? {room:rogueRun.room,portalActive:rogueRun.portalActive,awaitReward:rogueRun.awaitReward,enemyCount:rogueEnemies.filter(e=>!e.dead).length,boss:!!(rogueBoss&&!rogueBoss.dead)} : null; },
-      get rogueMeta(){ return {...rogueMeta}; }, showRogueHub, beginRogueRoom, performRogueAttackHit,
       get bulkRecoverWorldSelectMode(){ return bulkRecoverWorldSelectMode; }, toggleBulkRecoverWorldTarget, enterBulkRecoverWorldMode, switchBulkRecoverWorldToList,
       models: { makeWolf, makeBoar, makeWolfClassic, makeBoarClassic, makeRockLizard, makeCrab, makeJellyfish, makeConiferTree, makeBroadleafTree, makeBush, makeDeadTree, makeCraggyRock, makeFlatRock, makeSpikyRock, makeHerb, makeRuin, makeChest, makeGuardian, makeGuardianBrute, makeCampfire, makeHut, makeCabin, makeFence, makeGate, makeFloor, makeCrystalCluster, makeUnderwaterSeaweed, makeUnderwaterCoral, makeSunkenShipwreck,
         animalPose:(kind, state='walk')=>{
@@ -8865,7 +8960,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=58-roguelite-dungeon"></script>
+<script src="shared.js?v=60-starbreak-dungeon"></script>
 <script src="boot.js"></script>
 </body>
 </html>
