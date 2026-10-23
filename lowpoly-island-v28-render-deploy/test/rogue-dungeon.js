@@ -17,7 +17,7 @@ check('屋外の灯台・海底洞窟のカメラ補正を別シーンの洞窟�
 check('床高計算前にダンジョンの禁止エリアを解決する',html.includes('if(inCaveIndex===ROGUE_DUNGEON_INDEX) constrainRogueDungeonPosition(player.position);\n\n    // 簡易ジャンプ/重力'));
 check('歩行範囲は見える床の内側に縮め、カメラの床判定だけ適度に余裕を持つ',html.includes('a.rx*0.99-0.45')&&html.includes('a.width*0.45')&&html.includes('rogueFloorHeight(x,z,0.58)'));
 check('下り坂の通路は広間の床メッシュから切り欠かれる',html.includes('rogueCorridorFloorSlot(15,-90,30,-95')&&html.includes('rogueCorridorFloorSlot(0,-103,0,-121')&&html.includes('rogueCorridorFloorSlot(0,-152,0,-166')&&html.includes('rogueClipPolygonToEllipse')&&html.includes('const x=pt.x-cx,y=-(pt.z-cz)'));
-check('通路脇の岩のサイズを含めた配置ガードがある',html.includes('rogueRockOverlapsPassage(x,z,rx,rz,.55)')&&html.includes('seg.w/2+2.8+Math.random()*1.4')&&html.includes('const rubbleFloor=rogueInterpolatedFloor(seg.za,seg.zb,seg.yA,seg.yB,z)'));
+check('通路脇の岩のサイズを含めた配置ガードがある',html.includes('rogueRockOverlapsPassage(x,z,rockRx,rockRz,.55)')&&html.includes('seg.w/2+2.8+Math.random()*1.4')&&html.includes('const rubbleFloor=rogueInterpolatedFloor(seg.za,seg.zb,seg.yA,seg.yB,z)'));
 check('視覚上の石橋に床のない隙間が発生しない',html.includes('BoxGeometry(bridge.width,.28,1.98)'));
 check('移動境界と床は同じ歩行領域を参照し、封印門で進行を管理',html.includes('function isRogueWalkable')&&html.includes('function constrainRogueDungeonPosition')&&html.includes('function setRogueGateOpen'));
 check('攻撃・敵接近・敵攻撃・ボスHPの専用処理がある',html.includes('function updateRogueDungeon(dt)')&&html.includes('rogueRun.boss.hp')&&html.includes('damagePlayer(damage'));
@@ -28,5 +28,5 @@ check('枝道の敵は任意で、倒さなくても本線の進行を止めな�
 check('枝道の敵はミニマップに残り、本線の残り数には含めない',html.includes('e.optional?1.25:1.7')&&html.includes('stage===rogueRun.stage&&!e.optional&&e.hp>0&&!e.dying'));
 check('死亡時は未精算の欠片と装備を失い、島へ帰還する',html.includes('leaveRogueDungeon(false,true)')&&html.includes('冒険失敗'));
 check('通常洞窟の半径13.5m制限は維持',/const CAVE_ROOM_R = 13\.5/.test(html)&&/const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v60.3バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v60\.3<\/div>/.test(html)&&html.includes('shared.js?v=60.3-rogue-combat-exit'));
+check('v60.4バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v60\.4<\/div>/.test(html)&&html.includes('shared.js?v=60.4-rock-rim-tdz-fix'));
 if(failures)process.exit(1);console.log('Rogue dungeon checks passed.');

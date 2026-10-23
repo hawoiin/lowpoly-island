@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%230b1220%27/%3E%3Cpath d=%27M10 52 32 8 54 52Z%27 fill=%27%23e8c07d%27/%3E%3C/svg%3E">
 <title>Lowpoly Fantasy — 探索の島</title>
 <style>
   html, body { margin:0; padding:0; overflow:hidden; background:#0b1220; font-family: -apple-system, "Hiragino Sans", sans-serif; touch-action:none; overscroll-behavior:none; }
@@ -544,7 +545,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v60.3</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v60.4</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1745,9 +1746,11 @@ window.startGame = function(NETINIT){
           if(Math.abs(z+52)<13&&Math.abs(x)<8) continue;
           if(Math.abs(z+110)<13&&Math.abs(x)<8) continue;
           if(Math.abs(z+158)<13&&Math.abs(x)<8) continue;
-          const rx=1.7+Math.random()*2.7, ry=1.1+Math.random()*2.2, rz=1.6+Math.random()*2.8;
-          if(rogueRockOverlapsPassage(x,z,rx,rz,.55)) continue;
-          addRock(x,floorY+.6+Math.random()*1.5,z,rx,ry,rz,rockMats[Math.floor(Math.random()*rockMats.length)]);
+          // 引数 rx/rz は広間の半径として上の配置座標に使うため、
+          // 個々の岩サイズは別名にして初期化前参照（TDZ）を防ぐ。
+          const rockRx=1.7+Math.random()*2.7, rockRy=1.1+Math.random()*2.2, rockRz=1.6+Math.random()*2.8;
+          if(rogueRockOverlapsPassage(x,z,rockRx,rockRz,.55)) continue;
+          addRock(x,floorY+.6+Math.random()*1.5,z,rockRx,rockRy,rockRz,rockMats[Math.floor(Math.random()*rockMats.length)]);
         }
       }
       rockRim(0,12,19,16,26,0); rockRim(0,-37,23,16,30,0); rockRim(0,-83,36,25,46,0);
@@ -9074,7 +9077,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=60.3-rogue-combat-exit"></script>
+<script src="shared.js?v=60.4-rock-rim-tdz-fix"></script>
 <script src="boot.js"></script>
 </body>
 </html>
