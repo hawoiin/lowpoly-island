@@ -20,7 +20,7 @@ check('最大選択数を超える選択を拒否する', /bulkRecoverSelected\.
 check('Enterで回収、Tabで一覧へ、Escで選択解除できる', /e\.code === 'Enter'.*submitBulkRecovery\(\)/.test(html) && /e\.code === 'Tab'.*switchBulkRecoverWorldToList\(\)/.test(html) && /e\.code === 'Escape'.*cancelBulkRecoverWorldMode\(\)/.test(html));
 check('一覧へ切り替えると選択状態を維持して再表示する', /function switchBulkRecoverWorldToList\(\)[\s\S]*?bulkRecoverMenu\.classList\.add\('show'\);\s*renderBulkRecoverList\(\)/.test(html));
 check('スマホではワールド選択ボタンを隠し、既存の一覧方式を残す', /body\.touch #bulkRecoverWorldSelect \{ display:none; \}/.test(html));
-check('選択モード中もプレイヤーの移動とジャンプ入力を許可する', /const inputOn = !isMenuOpen\(\) \|\| bulkRecoverWorldSelectMode/.test(html));
+check('選択モード中もプレイヤーの移動とジャンプ入力を許可する', /const inputOn = \(\(!isMenuOpen\(\) && \(!rogueModalEl \|\| rogueModalEl\.hidden\)\) \|\| bulkRecoverWorldSelectMode\)/.test(html));
 check('選択モード開始時にポインターロックせず、カーソルを解放する', (()=>{ const enter = html.slice(html.indexOf('function enterBulkRecoverWorldMode()'), html.indexOf('function switchBulkRecoverWorldToList()')); return /document\.exitPointerLock\(\)/.test(enter) && /renderer\.domElement\.style\.cursor = 'crosshair'/.test(enter) && /updateBulkRecoverWorldTarget\(\)/.test(enter) && !/lockPointer\(\)/.test(enter); })());
 check('右ドラッグで視点を操作し、画面上のカーソルを選択照準にする', /bulkRecoverWorldLookDragging[\s\S]*?yaw -= dx \* 0\.0022[\s\S]*?pitch \+= dy \* 0\.0018[\s\S]*?bulkRecoverWorldCrosshair\.style\.left = `\$\{e\.clientX\}px`/.test(html));
 check('回収結果待ちには一覧を再表示し、二重実行を避ける', /bulkRecoverPending = true;[\s\S]*?bulkRecoverMenu\.classList\.add\('show'\);/.test(html) && /if \(bulkRecoverPending\) return;/.test(html));
