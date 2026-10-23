@@ -1240,7 +1240,7 @@
   }
 
   // 洞窟の出入りはワールド座標と室内ローカル座標が切り替わるため、速度判定とは別に入口位置を検証する。
-  function isValidCaveTransition(fromCave, toCave, fromX, fromZ, toX, toZ) {
+  function isValidCaveTransition(fromCave, toCave, fromX, fromZ, toX, toZ, allowDeadExit = false) {
     if (fromCave === toCave) return true;
     if (fromCave < 0 && toCave >= 0) {
       const site = CAVE_SITES[toCave];
@@ -1252,9 +1252,22 @@
     }
     if (fromCave >= 0 && toCave < 0) {
       const site = CAVE_SITES[fromCave];
-      if (!site || distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) > CAVE_TRANSITION_RADIUS) return false;
+      if (!site) return false;
       const ex = site.x + site.dirX * CAVE_EXIT_OFFSET;
       const ez = site.z + site.dirZ * CAVE_EXIT_OFFSET;
+      // 通常洞窟は従来どおり出口付近からのみ退室可能。
+      // ローグライク遺跡では深層の生還門と死亡後の帰還も同じ島側出口へ戻すため、
+      // 内部の有効範囲内なら出口座標を検証して退室を許可する。
+      // 退室先は指定された入口外の座標に固定し、任意地点へのワープは許可しない。
+      if (fromCave === ROGUE_DUNGEON_INDEX) {
+        if (!isValidCavePosition(fromCave, fromX, fromZ)) return false;
+        const atMainExit = distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) <= CAVE_TRANSITION_RADIUS;
+        const atExtractionPortal = distanceXZ(fromX, fromZ, 0, -201) <= CAVE_TRANSITION_RADIUS;
+        // 生還門・通常出口以外からのワープは拒否。死亡後だけは任意の有効な内部位置から帰還可能。
+        if (!atMainExit && !atExtractionPortal && !allowDeadExit) return false;
+        return distanceXZ(toX, toZ, ex, ez) <= CAVE_EXIT_SPAWN_RADIUS;
+      }
+      if (distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) > CAVE_TRANSITION_RADIUS) return false;
       return distanceXZ(toX, toZ, ex, ez) <= CAVE_EXIT_SPAWN_RADIUS;
     }
     // 洞窟0→洞窟1のような直接ワープは禁止。
@@ -1487,7 +1500,7 @@
               const serverElapsedFromOrigin = Math.max(0, (now - c.serverTimeOrigin) / 1000);
               if (clientElapsedFromOrigin > serverElapsedFromOrigin + MAX_CLIENT_TIME_AHEAD_SEC) return;
             }
-            if (!isValidCaveTransition(c.cave, msg.cave, c.x, c.z, msg.x, msg.z)) return;
+            if (!isValidCaveTransition(c.cave, msg.cave, c.x, c.z, msg.x, msg.z, c.dead)) return;
             if (c.cave === msg.cave) {
               // 現行クライアントは送信時刻(ts)を付けるため、WebSocketの受信が固まっても
               // バッファされた位置更新を順番に正しく検証できる。旧クライアントは受信時刻にフォールバック。
