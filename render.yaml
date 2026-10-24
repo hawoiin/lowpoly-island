@@ -3,7 +3,7 @@ services:
     name: lowpoly-island-multiplayer
     runtime: node
     plan: free
-    rootDir: lowpoly-island-v28-render-deploy
+    rootDir: lowpoly-island-render-deploy
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /
