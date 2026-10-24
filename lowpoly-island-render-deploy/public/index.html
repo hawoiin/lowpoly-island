@@ -576,7 +576,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v62.8</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v62.9</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -2546,6 +2546,32 @@ window.startGame = function(NETINIT){
     }
     updateRogueHud();
   }
+  // 坂の途中から横へ出る際、隣の床が坂面より大幅に高い場合は側面を壁として扱う。
+  // 高い床への移動を許すと、次の接地更新でプレイヤーが上へ瞬間移動したように見える。
+  // 低い床へ降りる移動や、端からの出入りは止めず、重力による落下をそのまま使う。
+  function rogueRampSideExitWouldStepUp(fromX,fromZ,toX,toZ){
+    const MAX_SIDE_STEP_UP=0.45;
+    for(const a of ROGUE_WALK_AREAS){
+      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
+      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz,len=Math.sqrt(len2);
+      if(len<1e-5)continue;
+      const project=(x,z)=>{
+        const t=((x-a.ax)*dx+(z-a.az)*dz)/len2;
+        return {t,d:pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)};
+      };
+      const from=project(fromX,fromZ),to=project(toX,toZ);
+      const endT=Math.min(0.14,1.25/len);
+      // 入口・出口付近は端から接続する通常の移動を優先する。
+      if(from.t<=endT||from.t>=1-endT||to.t<=endT||to.t>=1-endT)continue;
+      const walkLimit=a.width*0.45;
+      // 坂の内側から側面の外へ出る動きだけを調べる。
+      if(from.d>walkLimit+1e-5||to.d<=walkLimit)continue;
+      const fromY=rogueFloorHeight(fromX,fromZ);
+      const toY=rogueFloorHeight(toX,toZ);
+      if(toY-fromY>MAX_SIDE_STEP_UP)return true;
+    }
+    return false;
+  }
   function constrainRogueDungeonPosition(pos){
     if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
     const last=rogueRun.lastPos||{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z};
@@ -2553,7 +2579,13 @@ window.startGame = function(NETINIT){
     if(Shared.isRogueRampSideEntryBlocked(last.x,last.z,pos.x,pos.z)){
       pos.x=last.x;pos.z=last.z;return;
     }
-    if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){rogueRun.lastPos={x:pos.x,z:pos.z};return;}
+    if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){
+      // 隣の床が坂より高い時だけ横抜けを止め、同じ高さ・低い床へ降りる動きは維持する。
+      if(rogueRampSideExitWouldStepUp(last.x,last.z,pos.x,pos.z)){
+        pos.x=last.x;pos.z=last.z;return;
+      }
+      rogueRun.lastPos={x:pos.x,z:pos.z};return;
+    }
     if(isRogueWalkable(pos.x,last.z,rogueRun.openGates)){pos.z=last.z;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     if(isRogueWalkable(last.x,pos.z,rogueRun.openGates)){pos.x=last.x;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     pos.x=last.x;pos.z=last.z;
@@ -9646,7 +9678,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=62.8-ramp-side-exit-fix"></script>
+<script src="shared.js?v=62.9-ramp-side-height-aware-exit"></script>
 <script src="boot.js"></script>
 </body>
 </html>

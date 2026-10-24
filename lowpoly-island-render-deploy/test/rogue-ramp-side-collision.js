@@ -1,4 +1,4 @@
-// v62.8: 坂の側面から乗り上げる侵入は止め、坂上から地面へ降りる移動は許す。
+// v62.9: 坂の側面から乗り上げる侵入は止め、坂上から地面へ降りる移動は許す。
 'use strict';
 const Shared = require('../public/shared.js');
 let failures = 0;
