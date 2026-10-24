@@ -12,3 +12,7 @@ services:
         value: production
       - key: MAX_PLAYERS
         value: "16"
+      - key: FREE_PLAN_MODE
+        value: "1"
+      - key: FREE_WORLD_SEED
+        value: "24101986"

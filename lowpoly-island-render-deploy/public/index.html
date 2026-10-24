@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%230b1220%27/%3E%3Cpath d=%27M10 52 32 8 54 52Z%27 fill=%27%23e8c07d%27/%3E%3C/svg%3E">
 <title>Lowpoly Fantasy — 探索の島</title>
 <style>
@@ -53,6 +54,8 @@
     font-size:34px; letter-spacing:.08em; margin:0 0 6px; font-weight:700;
   }
   #startOverlay p { opacity:.65; margin:0 0 28px; font-size:14px; }
+  #freePlanNotice { max-width:min(88vw,700px); box-sizing:border-box; margin:0 18px 18px !important; padding:10px 13px; border:1px solid rgba(232,192,125,.42); border-radius:10px; background:rgba(232,192,125,.08); color:#f5deb0; font-size:12px !important; line-height:1.55; opacity:.94 !important; }
+  #freePlanSaveNotice, #freePlanRogueNotice { color:#f5deb0; border-left:2px solid rgba(232,192,125,.65); padding-left:9px; }
   #startOverlay button {
     background:#e8c07d; color:#241a0d; border:none; padding:14px 32px;
     font-size:15px; font-weight:700; border-radius:999px; cursor:pointer;
@@ -569,10 +572,11 @@
 <div id="startOverlay">
   <h1>探索の島</h1>
   <p>WASD移動 / マウスで視点 / クリックで攻撃 / Eで採集・操作 / 建築物の回収はE長押し / Spaceジャンプ / Shiftダッシュ / Bでビルド / Cで図鑑 / Enterでチャット / 1 手を振る・2 ダンス・3 びっくり・4 ガッツポーズ / Oで設定</p>
+  <p id="freePlanNotice" hidden>Render Free仕様：共有ワールドとダンジョンの進行・遺品袋はサーバー内の一時データです。スリープ・再起動・更新後は初期状態に戻ることがあります。大切な建築は設定からJSONを書き出して保管してください。個人データはこのブラウザ内に保存されます。</p>
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v61.8</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v62.7</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -625,6 +629,7 @@
   <div class="panel">
     <h2 id="roguePartyTitle">遺跡ダンジョンへ入る</h2>
     <p>同じ6文字のパーティーコードを使うプレイヤーは、同じ探索ランに入ります。宝箱の報酬は全員が個別に獲得できます。</p>
+    <small id="freePlanRogueNotice" hidden>Render Freeではサーバーの再起動・スリープ・更新で探索ランと遺品袋が失われます。再起動中に探索中だった場合は中断扱いとなり、携行装備と未精算の欠片を失います。保管庫と精算済み欠片はブラウザ側に残ります。</small>
     <label for="roguePartyCodeInput">パーティーコード（6文字）
       <input id="roguePartyCodeInput" type="text" maxlength="6" minlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：7KQ4RD" />
     </label>
@@ -632,7 +637,7 @@
     <button id="roguePartyJoin" type="button">コードで参加する</button>
     <button id="roguePartySolo" type="button">ソロで入る</button>
     <button id="roguePartyCancel" type="button">キャンセル</button>
-    <small>作成時に表示されるコードを仲間に共有してください。ゲーム全体の同時接続上限は16人です。</small>
+    <small>作成時に表示されるコードを仲間に共有してください。前回のコードは入力欄に再表示され、同じ探索への再参加にも使えます。ゲーム全体の同時接続上限は16人です。</small>
   </div>
 </div>
 
@@ -713,7 +718,8 @@
     </section>
     <section id="saveTools">
       <h3>セーブデータ</h3>
-      <p>プレイヤーの所持品・図鑑・剣強化・設定と、共有ワールドのシード・建築物・宝箱状態を1つのJSONファイルに保存します。インポート時はプレイヤーデータを置き換えます。</p>
+      <p>プレイヤーデータと共有ワールドの状態を1つのJSONファイルに書き出せます。インポート時はプレイヤーデータを置き換えます。</p>
+      <p id="freePlanSaveNotice" hidden>Render Freeではサーバー上のワールド保存は一時的です。スリープ・再起動・再デプロイ後は建築・採集・宝箱の状態が初期化されます。残したい場合はJSONを定期的に書き出して手元へ保管してください。共有ワールドの復元には管理者認証が必要です。</p>
       <div id="saveToolsButtons">
         <button id="saveExportButton" type="button">書き出す</button>
         <button id="saveImportButton" type="button">読み込む</button>
@@ -936,6 +942,19 @@
 window.startGame = function(NETINIT){
   const Net = NETINIT.net;
   let NET_ID = NETINIT.welcome.id; // 再接続で変わる
+  const FREE_PLAN_SESSION_MODE = !!(NETINIT.online && NETINIT.welcome.freePlanMode === true);
+  const SERVER_SESSION_STORAGE_KEY = 'lowpoly-island-server-session-id-v1';
+  let currentServerSessionId = typeof NETINIT.welcome.serverSessionId === 'string' ? NETINIT.welcome.serverSessionId : '';
+  let previousServerSessionId = '';
+  try {
+    previousServerSessionId = localStorage.getItem(SERVER_SESSION_STORAGE_KEY) || '';
+  } catch(e) {}
+  // Compare the saved marker on first page load too: a fresh page otherwise
+  // receives only the new session ID and cannot tell that Render restarted.
+  const initialServerSessionChanged = FREE_PLAN_SESSION_MODE && !!previousServerSessionId && !!currentServerSessionId && previousServerSessionId !== currentServerSessionId;
+  document.getElementById('freePlanNotice').hidden = !FREE_PLAN_SESSION_MODE;
+  document.getElementById('freePlanSaveNotice').hidden = !FREE_PLAN_SESSION_MODE;
+  document.getElementById('freePlanRogueNotice').hidden = !FREE_PLAN_SESSION_MODE;
 
   // 島の生成中だけMath.randomをシード付きにして、全員が同じ島(木・岩・遺跡・洞窟)を生成する
   const realRandom = Math.random;
@@ -2045,6 +2064,16 @@ window.startGame = function(NETINIT){
   let rogueRun = null;
   let rogueRunCount = 0;
   const ROGUE_META_KEY = 'lowpoly-island-rogue-meta-v60';
+  // Snapshot the persisted run flag before load() clears runInProgress on page reload.
+  const rogueRunWasInProgressAtPageLoad = (() => {
+    try {
+      const raw = localStorage.getItem(RogueProgression.KEY);
+      const stored = raw ? JSON.parse(raw) : null;
+      return !!(stored && stored.runInProgress === true);
+    } catch(e) { return false; }
+  })();
+  // Keep this declaration after the snapshot above: reading it earlier hits the temporal dead zone.
+  const initialRunWasInProgress = FREE_PLAN_SESSION_MODE && rogueRunWasInProgressAtPageLoad;
   const rogueProgress = RogueProgression.load(localStorage);
   const rogueMeta = {
     get shards(){ return rogueProgress.shards; },
@@ -2074,6 +2103,17 @@ window.startGame = function(NETINIT){
   const roguePartySolo = document.getElementById('roguePartySolo');
   const roguePartyCancel = document.getElementById('roguePartyCancel');
   let activeRoguePartyCode = '';
+  const ROGUE_LAST_PARTY_CODE_KEY = 'lowpoly-island-last-rogue-party-code-v1';
+  function loadLastRoguePartyCode(){
+    try {
+      const code=localStorage.getItem(ROGUE_LAST_PARTY_CODE_KEY);
+      return typeof code==='string' && /^[A-Z0-9]{6}$/.test(code) ? code : '';
+    } catch(e) { return ''; }
+  }
+  function rememberLastRoguePartyCode(code){
+    if(typeof code!=='string' || !/^[A-Z0-9]{6}$/.test(code)) return;
+    try { localStorage.setItem(ROGUE_LAST_PARTY_CODE_KEY,code); } catch(e) {}
+  }
   let rogueRecoveryStatusBag = null;
   let rogueRecoveryStatusReceivedAt = 0;
   const rogueRecoveryStatusEl = document.getElementById('rogueRecoveryStatus');
@@ -2103,7 +2143,9 @@ window.startGame = function(NETINIT){
   function closeRogueMetaPanel(){ rogueMetaPanel.classList.remove('show'); }
   function openRoguePartyPanel(){
     if(playerDead || inCaveIndex>=0 || !gameStarted) return;
-    roguePartyCodeInput.value='';
+    // 前回のコードを再表示し、死亡後でも同じ探索ランへ戻って遺品を回収しやすくする。
+    // 自動参加はせず、参加ボタンを押したときだけ接続先を決定する。
+    roguePartyCodeInput.value=loadLastRoguePartyCode();
     roguePartyPanel.classList.add('show');
     if(document.pointerLockElement) document.exitPointerLock();
   }
@@ -2116,6 +2158,7 @@ window.startGame = function(NETINIT){
   function enterRogueWithParty(mode, code=''){
     if(mode==='party' && !/^[A-Z0-9]{6}$/.test(code)){ showToast('パーティーコードは英数字6文字で入力してください','協力探索'); return; }
     activeRoguePartyCode=(mode==='party'||mode==='create')?code:'';
+    if(mode==='party'||mode==='create') rememberLastRoguePartyCode(code);
     closeRoguePartyPanel();
     enterCave(ROGUE_DUNGEON_INDEX,{mode:mode==='solo'?'solo':mode,code:activeRoguePartyCode});
     if(mode==='create') showToast(`パーティーコード：${code}（仲間に共有してください）`,'協力探索');
@@ -2505,8 +2548,12 @@ window.startGame = function(NETINIT){
   }
   function constrainRogueDungeonPosition(pos){
     if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
-    if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     const last=rogueRun.lastPos||{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z};
+    // 傾斜した板の側壁を横切って入る動きを止める。坂の端からの出入りは従来どおり許可する。
+    if(Shared.isRogueRampSideEntryBlocked(last.x,last.z,pos.x,pos.z,0.35)){
+      pos.x=last.x;pos.z=last.z;return;
+    }
+    if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     if(isRogueWalkable(pos.x,last.z,rogueRun.openGates)){pos.z=last.z;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     if(isRogueWalkable(last.x,pos.z,rogueRun.openGates)){pos.x=last.x;rogueRun.lastPos={x:pos.x,z:pos.z};return;}
     pos.x=last.x;pos.z=last.z;
@@ -8738,6 +8785,36 @@ window.startGame = function(NETINIT){
     }
   }
 
+  // Render Freeではプロセス再起動で共有状態が初期化される。再接続で新しいセッションを検知したら、
+  // 古いダンジョンの座標・携行品を新しい探索へ誤って持ち込まないよう、途中ランを中断扱いにする。
+  function handleFreePlanServerSessionReset(){
+    const wasInRogueDungeon = inCaveIndex === ROGUE_DUNGEON_INDEX;
+    const interruptedRun = !!rogueProgress.runInProgress || wasInRogueDungeon;
+    if (interruptedRun) {
+      RogueProgression.die(rogueProgress, localStorage);
+      attackBuffTimer = 0; speedBuffTimer = 0;
+      saveRogueMeta();
+    }
+    if (wasInRogueDungeon) {
+      const cave = caves[ROGUE_DUNGEON_INDEX];
+      if (player.parent) player.parent.remove(player);
+      scene.add(player);
+      const ex = cave.mouth.x - cave.dir.x * Shared.CAVE_EXIT_RECESS;
+      const ez = cave.mouth.z - cave.dir.z * Shared.CAVE_EXIT_RECESS;
+      player.position.set(ex, islandHeight(ex, ez), ez);
+      yaw = Math.atan2(-cave.dir.x, -cave.dir.z);
+      inCaveIndex = -1; insideCave = false; activeScene = scene; camSnap = true;
+      setCaveAudio(false); cleanupRogueRun(); activeRoguePartyCode = '';
+      playerDead = false; playerHp = PLAYER_MAX_HP; updatePlayerHpBar();
+      document.getElementById('deathOverlay').classList.remove('show');
+      vy = 0; grounded = true; playerInvuln = 1.2;
+      hurtKnock.x = hurtKnock.z = 0; touchMove.x = touchMove.y = 0; touchJump = false;
+      playerMoving = false; playerSprinting = false;
+    }
+    rogueRecoveryStatusBag = null; rogueRecoveryStatusReceivedAt = 0; updateRogueRecoveryStatus();
+    return interruptedRun;
+  }
+
   function handleNet(m){
     try {
       switch (m.t){
@@ -9007,7 +9084,17 @@ window.startGame = function(NETINIT){
           for (const id of [...remotes.keys()]) removeRemote(id); // 切れている間は他のプレイヤーを表示しない
           updateNetInfo();
           break;
-        case 'welcome': // 再接続できた: 最新の世界に合わせ直し、参加し直す
+        case 'welcome': { // 再接続できた: 最新の世界に合わせ直し、参加し直す
+          const nextSessionId = typeof m.serverSessionId === 'string' ? m.serverSessionId : '';
+          const serverSessionChanged = FREE_PLAN_SESSION_MODE && !!currentServerSessionId && !!nextSessionId && nextSessionId !== currentServerSessionId;
+          let interruptedByFreeRestart = false;
+          if (serverSessionChanged) interruptedByFreeRestart = handleFreePlanServerSessionReset();
+          if (nextSessionId) {
+            currentServerSessionId = nextSessionId;
+            if (FREE_PLAN_SESSION_MODE) {
+              try { localStorage.setItem(SERVER_SESSION_STORAGE_KEY, nextSessionId); } catch(e) {}
+            }
+          }
           netReconnecting = false; netLost = false;
           // 管理者として認証済みだった場合だけ、再接続した新しいソケットで再認証を試みる。
           if (adminSessionRequested && document.getElementById('saveAdminKey').value.trim()) {
@@ -9018,8 +9105,13 @@ window.startGame = function(NETINIT){
           applyWelcome(m);
           if (gameStarted) Net.send({ t:'join', name:myName, key:getPlayerKey() });
           updateNetInfo();
-          showToast('再接続しました', '接続');
+          if (serverSessionChanged) {
+            showToast(interruptedByFreeRestart
+              ? '無料プランのサーバーが再起動しました。探索は中断扱いとなり、携行装備・未精算の欠片・遺品袋は失われました。保管庫と精算済み欠片は残っています。'
+              : '無料プランのサーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
+          } else showToast('再接続しました', '接続');
           break;
+        }
         case 'disconnected':
           netLost = true; netReconnecting = false;
           adminEnemyRangeToggle.disabled = false;
@@ -9531,6 +9623,19 @@ window.startGame = function(NETINIT){
   }
   applyWelcome(NETINIT.welcome);
   loadProgress();
+  if (FREE_PLAN_SESSION_MODE) {
+    // RogueProgression.load() already applies death-on-reload. Preserve the
+    // pre-load flag only to explain that loss accurately to the player.
+    if (currentServerSessionId) {
+      try { localStorage.setItem(SERVER_SESSION_STORAGE_KEY, currentServerSessionId); } catch(e) {}
+    }
+    if (initialServerSessionChanged) handleFreePlanServerSessionReset();
+    if (initialRunWasInProgress) {
+      showToast('前回の探索は中断扱いになりました。携行装備と未精算の欠片は失われました。保管庫と精算済み欠片は残っています。', '探索中断');
+    } else if (initialServerSessionChanged) {
+      showToast('無料プランのサーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
+    }
+  }
   setInterval(saveProgress, 8000);
   addEventListener('beforeunload', saveProgress);
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) saveProgress(); });
@@ -9541,7 +9646,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=61.8-spawn-slope-fix"></script>
+<script src="shared.js?v=62.7-free-session-startup-order-fix"></script>
 <script src="boot.js"></script>
 </body>
 </html>

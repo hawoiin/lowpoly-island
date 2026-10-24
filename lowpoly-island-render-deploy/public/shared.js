@@ -203,6 +203,33 @@
       : roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*0.45);
   }
 
+  // 斜面通路の側壁は見た目だけのメッシュなので、移動時に側面を横切る動きを別途止める。
+  // 前後の位置が側壁を横切り、かつ通路の端付近ではない場合だけ衝突とする。
+  // 端から通路方向へ入る通常の移動や、通路内を進む動きは妨げない。
+  function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ,bodyRadius=0.35){
+    if(![fromX,fromZ,toX,toZ,bodyRadius].every(Number.isFinite))return false;
+    for(const a of ROGUE_WALK_AREAS){
+      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
+      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
+      const len=Math.sqrt(len2);
+      if(len<1e-5)continue;
+      const point=(x,z)=>{
+        const t=((x-a.ax)*dx+(z-a.az)*dz)/len2;
+        const qx=a.ax+t*dx,qz=a.az+t*dz;
+        return {t,d:Math.hypot(x-qx,z-qz)};
+      };
+      const from=point(fromX,fromZ),to=point(toX,toZ);
+      // 入口と出口の端から約1.25mは開けておく。中央部の側面だけを壁として扱う。
+      const endT=Math.min(0.14,1.25/len);
+      if(to.t<=endT||to.t>=1-endT)continue;
+      // addCorridorFloor の側壁は width/2 + .18m の位置にあり、厚み .34m。
+      // プレイヤー半径も含めた中心位置の侵入限界は width/2 + .18 + .17 + bodyRadius。
+      const sideLimit=a.width*0.5+0.35+bodyRadius;
+      if((from.d>sideLimit&&to.d<=sideLimit)||(from.d<=sideLimit&&to.d>sideLimit))return true;
+    }
+    return false;
+  }
+
   // 粗いグリッド経路探索。細い主橋も通れるように2.5m間隔で、地形定義と同じ歩行判定を使う。
   const ROGUE_NAV = (()=>{
     const minX=-100,minZ=-220,step=2.5,nx=81,nz=97,walkable=new Uint8Array(nx*nz);
@@ -1472,6 +1499,8 @@
       this.rogueRoomsById = new Map();   // instanceId -> room state
       this.rogueRoomSeq = 1;
       this.rogueHitCooldowns = new Map();
+      // 遺品袋だけはサーバー保存ファイルへ別枠で保存し、公開ワールドバックアップには含めない。
+      this.rogueRecoveryStore = new Map(); // partyKey -> inactive recovery record
       this.out = { sendTo() {}, broadcast() {} };
 
       if (saved && typeof saved === 'object') {
@@ -1523,6 +1552,75 @@
         this.enemies.push(en);
         this.placeEnemy(en);
       }
+      if (opts.rogueRecoveryState) this.restoreRogueRecoveryState(opts.rogueRecoveryState);
+    }
+
+    // 保存ファイルから遺品袋を復元する。全データを検証し、クライアントへ公開するワールド保存とは分離する。
+    restoreRogueRecoveryState(raw) {
+      this.rogueRecoveryStore.clear();
+      if (!raw || typeof raw !== 'object' || raw.version !== 1 || !Array.isArray(raw.rooms)) return 0;
+      const validPartyKey = key => typeof key === 'string' && (/^solo:[a-f0-9]{16}$/.test(key) || /^party:[A-Z0-9]{6}$/.test(key));
+      let restored = 0;
+      for (const source of raw.rooms.slice(0,128)) {
+        if (!source || typeof source !== 'object' || !validPartyKey(source.key) || this.rogueRecoveryStore.has(source.key)) continue;
+        if (!Number.isInteger(source.seed) || source.seed < 0 || source.seed > 0xffffffff) continue;
+        if (!Number.isInteger(source.stage) || source.stage < 0 || source.stage > 4 || !Number.isInteger(source.openGates) || source.openGates < source.stage || source.openGates > 4) continue;
+        if (!Array.isArray(source.bags) || source.bags.length < 1 || source.bags.length > 16) continue;
+        const layout = getRogueDungeonLayout(source.seed >>> 0);
+        const enemyMax = new Map(layout.enemies.map(e => [e.id, e.hp]));
+        enemyMax.set('boss', layout.boss.hp);
+        const enemyHp = new Map(enemyMax);
+        if (source.enemyHp && typeof source.enemyHp === 'object' && !Array.isArray(source.enemyHp)) {
+          for (const [id, hp] of Object.entries(source.enemyHp)) {
+            if (!enemyMax.has(id) || !Number.isInteger(hp) || hp < 0 || hp > enemyMax.get(id)) continue;
+            enemyHp.set(id, hp);
+          }
+        }
+        const openedChests = new Set(Array.isArray(source.openedChests) ? source.openedChests.filter(i => Number.isInteger(i) && i >= 0 && i < layout.chests.length) : []);
+        const bags = new Map();
+        for (const item of source.bags) {
+          if (!item || typeof item !== 'object' || typeof item.ownerPid !== 'string' || !/^[a-f0-9]{16}$/.test(item.ownerPid) || bags.has(item.ownerPid)) continue;
+          if (typeof item.bagId !== 'string' || !/^[A-Za-z0-9:_-]{1,80}$/.test(item.bagId)) continue;
+          const x = Number(item.x), z = Number(item.z), remainingMs = Number(item.remainingMs);
+          if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 110 || z < -235 || z > 15 || !isRogueDungeonWalkable(x,z,source.openGates)) continue;
+          if (!Number.isFinite(remainingMs) || remainingMs <= 0 || remainingMs > 7*60*1000) continue;
+          const payload = this.rogueCarryPayload(item.payload);
+          if (!this.hasRogueCarry(payload)) continue;
+          bags.set(item.ownerPid, {
+            bagId:item.bagId, ownerPid:item.ownerPid,
+            ownerName:typeof item.ownerName === 'string' && item.ownerName.trim() ? item.ownerName.trim().slice(0,24) : '旅人',
+            x, z, remainingMs:Math.floor(remainingMs), payload
+          });
+        }
+        if (!bags.size) continue;
+        const seq = Number.isSafeInteger(source.recoverySeq) && source.recoverySeq >= 1 && source.recoverySeq <= 1000000 ? source.recoverySeq : 1;
+        this.rogueRecoveryStore.set(source.key, {
+          key:source.key, seed:source.seed >>> 0, stage:source.stage, openGates:source.openGates,
+          extractReady:source.extractReady === true && source.stage >= 4,
+          openedChests:[...openedChests], enemyHp:Object.fromEntries(enemyHp), recoverySeq:seq,
+          bags:[...bags.values()]
+        });
+        restored++;
+      }
+      return restored;
+    }
+
+    // ディスク用の非公開保存形式。クライアントのsaveExport / worldImportには渡さない。
+    serializeRogueRecoveryState() {
+      const records = new Map(this.rogueRecoveryStore);
+      for (const room of this.rogueRooms.values()) {
+        if (!room || room.recoveryBags.size === 0) { if (room) records.delete(room.key); continue; }
+        records.set(room.key, {
+          key:room.key, seed:room.seed, stage:room.stage, openGates:room.openGates,
+          extractReady:room.extractReady === true, openedChests:[...room.openedChests],
+          enemyHp:Object.fromEntries(room.enemyHp), recoverySeq:room.recoverySeq,
+          bags:[...room.recoveryBags.values()].map(bag=>({
+            bagId:bag.bagId, ownerPid:bag.ownerPid, ownerName:bag.ownerName,
+            x:bag.x, z:bag.z, remainingMs:bag.remainingMs, payload:bag.payload
+          }))
+        });
+      }
+      return { version:1, rooms:[...records.values()].slice(0,128) };
     }
 
     // 種類ごとの生息場所を1か所選ぶ。置けなければ null
@@ -1704,14 +1802,20 @@
       const partyKey=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${c.pid || id}`;
       let room=this.rogueRooms.get(partyKey);
       if(!room) {
-        const seed=Math.floor(Math.random()*4294967296)>>>0;
+        const savedRecovery=this.rogueRecoveryStore.get(partyKey)||null;
+        const seed=savedRecovery?savedRecovery.seed:(Math.floor(Math.random()*4294967296)>>>0);
         const layout=getRogueDungeonLayout(seed);
         const enemyHp=new Map(layout.enemies.map(e=>[e.id,e.hp]));
         enemyHp.set(layout.boss.id,layout.boss.hp);
+        if(savedRecovery && savedRecovery.enemyHp && typeof savedRecovery.enemyHp==='object'){
+          for(const [enemyId,hp] of Object.entries(savedRecovery.enemyHp))if(enemyHp.has(enemyId)&&Number.isInteger(hp)&&hp>=0)enemyHp.set(enemyId,hp);
+        }
         const initEnemyState=(e,cooldown)=>({x:e.x,z:e.z,homeX:e.x,homeZ:e.z,yaw:0,cooldown,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0,phase:'idle',windupTimer:0,recoverTimer:0,aimX:e.x,aimZ:e.z,attackRadius:1.5,attackMode:'',chargeDx:0,chargeDz:0,chargeTimer:0,chargeHit:false});
         const enemyStates=new Map(layout.enemies.map(e=>[e.id,initEnemyState(e,0.8+Math.random()*0.9)]));
         enemyStates.set(layout.boss.id,initEnemyState(layout.boss,1.2));
-        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:0,openGates:0,extractReady:false,openedChests:new Set(),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map(),memberCarry:new Map(),recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
+        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:savedRecovery?savedRecovery.stage:0,openGates:savedRecovery?savedRecovery.openGates:0,extractReady:savedRecovery?savedRecovery.extractReady===true:false,openedChests:new Set(savedRecovery?savedRecovery.openedChests:[]),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map((savedRecovery?savedRecovery.bags:[]).map(bag=>[bag.ownerPid,bag])),memberCarry:new Map(),recoverySeq:savedRecovery?savedRecovery.recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
+        // once activated, the active room becomes the single source of truth for saved recovery data.
+        this.rogueRecoveryStore.delete(partyKey);
         this.rogueRooms.set(partyKey,room);
         this.rogueRoomsById.set(room.id,room);
       }
@@ -2849,6 +2953,7 @@
   return {
     WORLD_SIZE, noise2, islandHeight, mulberry32, WorldSim, MAX_BULK_PICKUP_IDS,
     WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, springTerrainOffset, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
+    isRogueRampSideEntryBlocked,
     FENCE_MIN_LENGTH, FENCE_MAX_LENGTH, FENCE_JOIN_TOLERANCE, fenceEndpoints, fenceEndpointJoin, fenceEndsMeet,
     ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, getCampIndexForEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, getCampLocations, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
     CHAT_MAX_CHARS, CHAT_INTERVAL_MS, EMOTE_COUNT, cleanChat, BODY_RADIUS, bodyPush,

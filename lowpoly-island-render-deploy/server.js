@@ -6,11 +6,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const Shared = require('./public/shared.js');
+const { isFreePlanMode, resolveFreeWorldSeed, isAllowedRestoreSeed, loadRuntimeSave, writeRuntimeSave } = require('./server-save.js');
 
 const PORT = +process.env.PORT || 4010;
 const MAX_PLAYERS = +process.env.MAX_PLAYERS || 16;
 const PUBLIC = path.join(__dirname, 'public');
 const SAVE_FILE = process.env.SAVE_FILE || path.join(__dirname, 'world.json');
+const FREE_PLAN_MODE = isFreePlanMode();
+const FREE_WORLD_SEED = resolveFreeWorldSeed();
+const SERVER_SESSION_ID = crypto.randomBytes(12).toString('hex');
 const PICKUP_OTHERS = process.env.PICKUP_OTHERS === '1'; // 1 なら他人の建築物も回収できる(既定は建てた人だけ)
 // 管理操作と共有ワールドの復元は全員に影響するため、サーバー側の管理者キーを要求する。
 // 未指定ならサーバー起動ごとに推測不能なキーを生成し、ホストのコンソールにだけ表示する。
@@ -18,10 +22,9 @@ const SAVE_ADMIN_TOKEN = process.env.SAVE_ADMIN_TOKEN || crypto.randomBytes(24).
 // 敵の攻撃予告範囲はサーバー起動時OFF。管理者が有効化した場合だけ全参加者へ反映する。
 let enemyAttackRangeDisplayEnabled = false;
 
-let saved = null;
-try { saved = JSON.parse(fs.readFileSync(SAVE_FILE, 'utf8')); } catch (e) { /* 初回起動 */ }
+const { world: saved, rogueRecovery: savedRogueRecovery } = loadRuntimeSave(SAVE_FILE, FREE_PLAN_MODE);
 
-const sim = new Shared.WorldSim({ saved, pickupOthers: PICKUP_OTHERS });
+const sim = new Shared.WorldSim({ saved, seed: FREE_PLAN_MODE && !saved ? FREE_WORLD_SEED : undefined, pickupOthers: PICKUP_OTHERS, rogueRecoveryState:savedRogueRecovery });
 const sockets = new Map();
 let nextId = 1;
 
@@ -92,7 +95,10 @@ wss.on('connection', ws => {
   let authAttempts = 0;
   const refill = setInterval(() => { budget = 120; }, 1000);
 
-  ws.send(JSON.stringify(sim.addClient(id)));
+  const welcome = sim.addClient(id);
+  welcome.serverSessionId = SERVER_SESSION_ID;
+  welcome.freePlanMode = FREE_PLAN_MODE;
+  ws.send(JSON.stringify(welcome));
   // 再参加者も現在の管理者設定を受け取る。新規サーバー起動時の既定値はOFF。
   sendJson(ws, { t:'attackRangeDisplayState', enabled:enemyAttackRangeDisplayEnabled });
 
@@ -184,6 +190,9 @@ wss.on('connection', ws => {
         const now = Date.now();
         if (now - lastSaveOperationAt < 1200) { sendJson(ws, { t:'adminWorldRestoreResult', requestId, ok:false, reason:'rateLimit' }); return; }
         lastSaveOperationAt = now;
+        if (!isAllowedRestoreSeed(m.world, FREE_PLAN_MODE, FREE_WORLD_SEED)) {
+          sendJson(ws, { t:'adminWorldRestoreResult', requestId, ok:false, reason:'seedMismatch' }); return;
+        }
         // 復元前の状態をレスポンスに含め、管理者ブラウザへ自動保存させる。
         const beforeWorld = sim.serialize();
         const beforeSavedAt = new Date().toISOString();
@@ -219,19 +228,28 @@ wss.on('connection', ws => {
         const expected = Buffer.from(SAVE_ADMIN_TOKEN, 'utf8');
         const authorized = supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
         if (!authorized) { sendResult({ ok:false, reason:'unauthorized' }); return; }
+        if (!isAllowedRestoreSeed(m.world, FREE_PLAN_MODE, FREE_WORLD_SEED)) {
+          sendResult({ ok:false, reason:'seedMismatch' }); return;
+        }
         const result = sim.restoreWorld(m.world);
         sendResult(result);
         if (result.ok) save(); // 管理者が明示的に復元した状態はすぐディスクへ保存する
         return;
       }
+      const recoveryBefore = (m.t === 'rogueRecoveryDrop' || m.t === 'rogueRecoveryClaim')
+        ? JSON.stringify(sim.serializeRogueRecoveryState()) : null;
       sim.handle(id, m);
       if (m.t === 'join') broadcastAdminPlayers();
+      // 遺品袋の作成・回収は30秒の通常保存を待たずに保存する。失敗要求では内容が変わらないため書き込まない。
+      if (recoveryBefore !== null && recoveryBefore !== JSON.stringify(sim.serializeRogueRecoveryState())) save();
     } catch (e) { console.error('handle error', e); }
   });
   ws.on('close', () => {
     clearInterval(refill);
     sockets.delete(id);
+    const recoveryBefore = JSON.stringify(sim.serializeRogueRecoveryState());
     sim.removeClient(id);
+    if (recoveryBefore !== JSON.stringify(sim.serializeRogueRecoveryState())) save();
     broadcastAdminPlayers();
   });
   ws.on('error', () => {});
@@ -255,12 +273,13 @@ setInterval(() => {
   }
 }, 30000);
 
-// ワールド保存(建築物・開封済みの宝箱・シード)
+// サーバー保存: 公開ワールドデータに加え、遺品袋だけを非公開の別枠へ保存する。
+// saveExport / worldImport は従来どおり sim.serialize() のワールド部分だけを扱う。
 function save() {
+  // On Render Free, avoid repeated serialization and writes to an ephemeral filesystem.
+  if (FREE_PLAN_MODE) return;
   try {
-    const tmp = SAVE_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(sim.serialize()));
-    fs.renameSync(tmp, SAVE_FILE);
+    writeRuntimeSave(SAVE_FILE, sim.serialize(), sim.serializeRogueRecoveryState(), false);
   } catch (e) { console.error('save error', e); }
 }
 setInterval(save, 30000);
@@ -270,5 +289,6 @@ process.on('SIGTERM', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`探索の島サーバー起動: http://localhost:${PORT}  (最大${MAX_PLAYERS}人 / seed ${sim.seed} / 他人の建築物の回収: ${PICKUP_OTHERS ? '可' : '不可'})`);
+  if (FREE_PLAN_MODE) console.log('Render Free仕様: サーバー内のワールド・ダンジョン進行・遺品袋は一時データです。再起動/スリープ/再デプロイ後は初期状態に戻ります。');
   if (!process.env.SAVE_ADMIN_TOKEN) console.log(`共有ワールド復元キー(ホストのみ使用): ${SAVE_ADMIN_TOKEN}`);
 });
