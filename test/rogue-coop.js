@@ -39,18 +39,25 @@ sim.handle(42,{t:'rogueHit',targetId:enemy.id,damage:8,x:enemy.x,z:enemy.z});
 const killed=sent.find(x=>x.to===41&&x.msg.t==='rogueEnemyHitState'&&x.msg.targetId===enemy.id&&x.msg.instanceId===one.instanceId&&x.msg.killed===true);
 check('敵を倒した状態と撃破報酬の通知が全員へ同期される',()=>{assert.ok(killed);assert.equal(killed.msg.hp,0);assert.ok(killed.msg.shardReward>=1&&killed.msg.shardReward<=3);});
 function hitTargetFor(id,target,damage=8){
-  const c=sim.clients.get(id);c.lastStateAt=Date.now()-10000;
-  sim.handle(id,{t:'state',x:target.x,y:0,z:target.z,ry:0,cave:Shared.ROGUE_DUNGEON_INDEX,f:0});
-  sim.rogueHitCooldowns.delete(`${id}:${target.id}`);
-  sim.handle(id,{t:'rogueHit',targetId:target.id,damage,x:target.x,z:target.z});
+  const c=sim.clients.get(id),room=sim.getRogueRoomForClient(id);
+  const initialHp=room.enemyHp.get(target.id)||0;
+  const hits=Math.max(1,Math.ceil(initialHp/Math.min(8,Math.max(1,damage))));
+  const anchor=target.boss?{x:0,z:-184}:target.stage===0?{x:0,z:-37}:target.stage===1?{x:0,z:-83}:{x:0,z:-137};
+  const state=room.enemyStates.get(target.id);state.x=anchor.x;state.z=anchor.z;
+  c.x=anchor.x;c.y=0;c.z=anchor.z;c.cave=Shared.ROGUE_DUNGEON_INDEX;c.dead=false;c.hasState=true;c.lastStateAt=Date.now();
+  for(let n=0;n<hits;n++){
+    c.lastStateAt=Date.now()-10000;
+    sim.rogueHitCooldowns.delete(`${id}:${target.id}`);
+    sim.handle(id,{t:'rogueHit',targetId:target.id,damage,x:anchor.x,z:anchor.z});
+  }
 }
 for(const id of ['e1','e2','e3']) hitTargetFor(42,layout.enemies.find(e=>e.id===id));
 check('本線の最初の敵を全滅させると共有区画が第2区画へ進む',()=>assert.equal(sim.getRogueRoomForClient(41).stage,1));
-for(const id of ['e4','e5','e6']) hitTargetFor(42,layout.enemies.find(e=>e.id===id));
+for(const id of ['e4','e5','e6','e9','e10']) hitTargetFor(42,layout.enemies.find(e=>e.id===id));
 check('枝道の任意敵を残しても本線の第2区画を突破できる',()=>assert.equal(sim.getRogueRoomForClient(41).stage,2));
-for(const id of ['e10','e11','e12','e13','e14']) hitTargetFor(42,layout.enemies.find(e=>e.id===id));
+for(const id of ['e12','e13','e14','e15','e17','e18']) hitTargetFor(42,layout.enemies.find(e=>e.id===id));
 check('深層の本線を全滅させると共有ボス区画が解放される',()=>assert.equal(sim.getRogueRoomForClient(41).stage,3));
-for(let i=0;i<6;i++) hitTargetFor(42,layout.boss,8);
+hitTargetFor(42,layout.boss,8);
 check('ボス撃破・生還門の解放が同じ探索ラン全員へ共有される',()=>{assert.equal(sim.getRogueRoomForClient(41).stage,4);assert.equal(sim.getRogueRoomForClient(41).extractReady,true);});
 const outsider=new Shared.WorldSim({seed:61012});const out=[];outsider.out={sendTo(id,msg){out.push(msg);},broadcast(){}};outsider.addClient(51);outsider.handle(51,{t:'join',name:'Outsider',key:'outsider'});
 outsider.handle(51,{t:'rogueChestOpen',index:0});

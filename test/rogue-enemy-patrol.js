@@ -1,4 +1,4 @@
-// v61.6: ソロでパーティーを作成した場合も全敵が停止して見えない問題を防ぐ。
+// v61.7: ソロでパーティーを作成した場合も全敵が停止して見えない問題を防ぐ。
 'use strict';
 const assert=require('assert');
 const Shared=require('../public/shared.js');

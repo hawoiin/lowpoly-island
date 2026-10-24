@@ -572,7 +572,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v61.6</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v61.7</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -2174,8 +2174,11 @@ window.startGame = function(NETINIT){
   const ROGUE_ENEMY_MATS={
     shade:new THREE.MeshStandardMaterial({color:0x4b607b,emissive:0x182f52,emissiveIntensity:.4,flatShading:true,roughness:.85}),
     crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
+    spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
+    charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
     sentinel:new THREE.MeshStandardMaterial({color:0x777a78,emissive:0x242a2b,emissiveIntensity:.28,flatShading:true,roughness:.85}),
     eye:new THREE.MeshBasicMaterial({color:0xff805e}),
+    spitterCore:new THREE.MeshStandardMaterial({color:0x9dffff,emissive:0x2debf2,emissiveIntensity:1.4,flatShading:true,roughness:.3}),
     boss:new THREE.MeshStandardMaterial({color:0x4b394f,emissive:0x57206c,emissiveIntensity:.6,flatShading:true,roughness:.78})
   };
   const ROGUE_GEOMETRIES={
@@ -2183,7 +2186,15 @@ window.startGame = function(NETINIT){
     body:new THREE.IcosahedronGeometry(.82,0), bossBody:new THREE.IcosahedronGeometry(1.45,0),
     head:new THREE.DodecahedronGeometry(.42,0), bossHead:new THREE.DodecahedronGeometry(.62,0),
     arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
-    bossSpike:new THREE.ConeGeometry(.28,.95,5), eye:new THREE.OctahedronGeometry(.11,0)
+    bossSpike:new THREE.ConeGeometry(.28,.95,5), chargerHorn:new THREE.ConeGeometry(.24,.78,5),
+    spitterCore:new THREE.OctahedronGeometry(.32,0), eye:new THREE.OctahedronGeometry(.11,0)
+  };
+  const ROGUE_ATTACK_WARNING_GEO=new THREE.TorusGeometry(1,.055,4,28);
+  const ROGUE_ATTACK_WARNING_MATS={
+    melee:new THREE.MeshBasicMaterial({color:0xff654d,transparent:true,opacity:.8,depthWrite:false}),
+    projectile:new THREE.MeshBasicMaterial({color:0x68f2fa,transparent:true,opacity:.85,depthWrite:false}),
+    charge:new THREE.MeshBasicMaterial({color:0xffb347,transparent:true,opacity:.88,depthWrite:false}),
+    slam:new THREE.MeshBasicMaterial({color:0xff3f70,transparent:true,opacity:.88,depthWrite:false})
   };
   const ROGUE_EYE_GEO=ROGUE_GEOMETRIES.eye;
   // 敵モデルの顔・目はローカル -Z を向く。プレイヤーの +Z 前方とは逆なので、
@@ -2272,13 +2283,24 @@ window.startGame = function(NETINIT){
       for(const side of [-1,1]){
         const arm=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossArm:ROGUE_GEOMETRIES.arm,mat); arm.position.set(side*(boss?1.35:.83),boss?1.55:.95,-.02); arm.rotation.z=side*.42; g.add(arm);
       }
+      if(kind==='spitter'){
+        const core=new THREE.Mesh(ROGUE_GEOMETRIES.spitterCore,ROGUE_ENEMY_MATS.spitterCore);core.position.set(0,1.18,-.72);core.scale.set(1.2,1,1.15);g.add(core);
+        for(const side of [-1,1]){const fin=new THREE.Mesh(ROGUE_GEOMETRIES.chargerHorn,mat);fin.position.set(side*.62,1.23,.12);fin.rotation.z=side*.9;fin.rotation.x=-.2;g.add(fin);}
+      }
+      if(kind==='charger'){
+        body.scale.set(1.32,1.24,1.08);
+        for(const side of [-1,1]){const horn=new THREE.Mesh(ROGUE_GEOMETRIES.chargerHorn,mat);horn.position.set(side*.43,2.05,-.43);horn.rotation.x=-Math.PI/2;horn.rotation.z=side*.2;g.add(horn);}
+      }
       if(boss){
         for(let i=0;i<5;i++){ const spike=new THREE.Mesh(ROGUE_GEOMETRIES.bossSpike,mat); spike.position.set((i-2)*.5,3.35,-.18); spike.rotation.z=(i-2)*.16; g.add(spike); }
       }
     }
     g.position.set(x,rogueFloorHeight(x,z),z); g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
     const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene; sceneRef.add(g);
-    return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
+    const warningType=kind==='spitter'?'projectile':kind==='charger'?'charge':(kind==='sentinel'||boss)?'slam':'melee';
+    const warningMesh=new THREE.Mesh(ROGUE_ATTACK_WARNING_GEO,ROGUE_ATTACK_WARNING_MATS[warningType]);
+    warningMesh.rotation.x=-Math.PI/2;warningMesh.position.set(x,rogueFloorHeight(x,z)+.065,z);warningMesh.visible=false;warningMesh.renderOrder=4;sceneRef.add(warningMesh);
+    return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
   }
   function makeRogueChest(x,z){
     const g=new THREE.Group();
@@ -2294,9 +2316,10 @@ window.startGame = function(NETINIT){
   function cleanupRogueRun(){
     const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene;
     if(rogueRun){
-      for(const e of rogueRun.enemies){ if(e.mesh&&e.mesh.parent)e.mesh.parent.remove(e.mesh); }
+      for(const e of rogueRun.enemies){ if(e.mesh&&e.mesh.parent)e.mesh.parent.remove(e.mesh); if(e.warningMesh&&e.warningMesh.parent)e.warningMesh.parent.remove(e.warningMesh); }
       for(const c of rogueRun.chests){ if(c.mesh&&c.mesh.parent)c.mesh.parent.remove(c.mesh); }
       for(const b of (rogueRun.recoveryBags||[])){if(b.mesh&&b.mesh.parent)b.mesh.parent.remove(b.mesh);}
+      if(rogueRun.boss&&rogueRun.boss.warningMesh&&rogueRun.boss.warningMesh.parent)rogueRun.boss.warningMesh.parent.remove(rogueRun.boss.warningMesh);
     }
     for(const gate of (sceneRef.userData.rogueGates||[])) gate.seal.visible=true;
     if(sceneRef.userData.rogueExtractionPortal) sceneRef.userData.rogueExtractionPortal.visible=false;
@@ -2361,6 +2384,15 @@ window.startGame = function(NETINIT){
       if(!state||typeof state.id!=='string'||![state.x,state.z,state.yaw].every(Number.isFinite))continue;
       const target=byId.get(state.id);if(!target)continue;
       target.targetX=state.x;target.targetZ=state.z;target.targetYaw=state.yaw;
+      target.phase=typeof state.phase==='string'?state.phase:'idle';
+      target.attackMode=typeof state.attackMode==='string'?state.attackMode:'';
+      target.aimX=Number.isFinite(state.aimX)?state.aimX:state.x;target.aimZ=Number.isFinite(state.aimZ)?state.aimZ:state.z;
+      target.attackRadius=Math.max(.5,Math.min(5,Number(state.attackRadius)||1.5));
+      if(target.warningMesh){
+        const warningActive=target.phase==='windup'&&Number.isFinite(target.aimX)&&Number.isFinite(target.aimZ);
+        target.warningMesh.visible=warningActive;
+        if(warningActive){target.warningMesh.position.set(target.aimX,rogueFloorHeight(target.aimX,target.aimZ)+.065,target.aimZ);target.warningMesh.scale.setScalar(target.attackRadius);}
+      }
       if(snap){target.mesh.position.x=state.x;target.mesh.position.z=state.z;target.mesh.position.y=rogueFloorHeight(state.x,state.z);target.mesh.rotation.y=state.yaw;}
       if(state.attack)target.attackPulse=.2;
     }
@@ -2398,7 +2430,7 @@ window.startGame = function(NETINIT){
     if(!target)return;
     target.hp=Math.max(0,Math.min(target.maxHp,Number(m.hp)||0));
     if(Number.isFinite(m.x)&&Number.isFinite(m.z)){target.mesh.position.x=m.x;target.mesh.position.z=m.z;target.mesh.position.y=rogueFloorHeight(m.x,m.z);}
-    if(m.killed && !target.dying){target.dying=true;target.dieT=0;if(target.boss)rogueRun.shards+=12;else rogueRun.shards+=Math.max(0,Math.min(3,Number(m.shardReward)||0));}
+    if(m.killed && !target.dying){target.dying=true;target.dieT=0;if(target.warningMesh)target.warningMesh.visible=false;if(target.boss)rogueRun.shards+=12;else rogueRun.shards+=Math.max(0,Math.min(3,Number(m.shardReward)||0));}
     else if(target.hp>0){target.dying=false;target.dieT=0;target.flash=.18;}
     if(Number.isInteger(m.stage))rogueRun.stage=Math.max(0,Math.min(4,m.stage));
     if(Number.isInteger(m.openGates)){rogueRun.openGates=Math.max(0,Math.min(4,m.openGates));setRogueGateOpen(rogueRun.openGates);}
@@ -2447,6 +2479,7 @@ window.startGame = function(NETINIT){
     for(const e of targets){
       if(e.hp>0&&e.flash>0){e.flash=Math.max(0,e.flash-dt);if(e.flash<=0)e.mesh.scale.setScalar(1);}
       if(e.hp<=0){
+        if(e.warningMesh)e.warningMesh.visible=false;
         if(!e.dying)continue;
         e.dieT+=dt;e.mesh.scale.setScalar(Math.max(.01,1-e.dieT*1.9));
         if(e.dieT>.55&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
@@ -2459,6 +2492,7 @@ window.startGame = function(NETINIT){
         const delta=Math.atan2(Math.sin(e.targetYaw-e.mesh.rotation.y),Math.cos(e.targetYaw-e.mesh.rotation.y));
         e.mesh.rotation.y+=delta*alpha;
         e.mesh.position.y=rogueFloorHeight(e.mesh.position.x,e.mesh.position.z)+(e.boss?Math.sin(performance.now()*.003)*.08:0);
+        if(e.warningMesh&&e.warningMesh.visible){e.warningMesh.position.y=rogueFloorHeight(e.warningMesh.position.x,e.warningMesh.position.z)+.065;e.warningMesh.rotation.z+=dt*0.7;}
       }
     }
     updateRogueHud();
@@ -9501,7 +9535,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=61.6-enemy-patrol"></script>
+<script src="shared.js?v=61.7-enemy-archetypes"></script>
 <script src="boot.js"></script>
 </body>
 </html>

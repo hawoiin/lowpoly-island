@@ -255,26 +255,48 @@
     return path.map(nid=>({x:g.minX+Math.floor(nid/g.nz)*g.step,z:g.minZ+(nid%g.nz)*g.step}));
   }
 
+  // ダンジョン専用の敵プロファイル。通常フィールド敵のAI/バランスには影響しない。
+  const ROGUE_ENEMY_PROFILES = Object.freeze({
+    shade:    Object.freeze({role:'melee',hp:7,speed:2.15,damage:3,cooldown:1.15,attackRange:1.7,attackRadius:1.35,windup:.18,recovery:.22,aggroRange:45,patrolSpeed:.7}),
+    crawler:  Object.freeze({role:'skirmisher',hp:8,speed:3.0,damage:3,cooldown:1.05,attackRange:1.5,attackRadius:1.25,windup:.12,recovery:.2,aggroRange:42,patrolSpeed:.86}),
+    spitter:  Object.freeze({role:'ranged',hp:8,speed:1.4,damage:4,cooldown:2.75,attackRange:12,minRange:6,preferredRange:9,attackRadius:2.1,windup:.85,recovery:.5,aggroRange:36,patrolSpeed:.5}),
+    sentinel: Object.freeze({role:'tank',hp:14,speed:1.2,damage:7,cooldown:2.8,attackRange:2.5,attackRadius:2.0,windup:.8,recovery:.75,aggroRange:36,patrolSpeed:.42}),
+    charger:  Object.freeze({role:'charger',hp:12,speed:1.4,chargeSpeed:5.0,damage:7,cooldown:3.0,attackRange:2.0,triggerRange:8.8,attackRadius:1.8,windup:.72,recovery:.85,aggroRange:40,patrolSpeed:.6})
+  });
+  function getRogueEnemyProfile(kind, stage=0, boss=false) {
+    const fallback=ROGUE_ENEMY_PROFILES.shade;
+    const base=boss
+      ? {role:'boss',hp:88,speed:1.5,damage:9,cooldown:2.7,attackRange:3.25,attackRadius:2.65,windup:.95,recovery:.9,aggroRange:42,patrolSpeed:0}
+      : (ROGUE_ENEMY_PROFILES[kind]||fallback);
+    const lv=Math.max(0,Math.min(3,Math.floor(Number(stage)||0)));
+    return {...base,hp:boss?base.hp:Math.round(base.hp*(1+lv*.14)),damage:boss?base.damage:Math.min(10,base.damage+Math.floor(lv/2)),speed:base.speed*(1+lv*.035),cooldown:Math.max(.82,base.cooldown-lv*.05)};
+  }
+
   // ローグライク遺跡の区画配置。全クライアントとサーバーが同じseedから同じ配置を再現する。
+  // 近接・高速接近・遠距離・重装・突進の役割を段階ごとに導入する。
   function getRogueDungeonLayout(seed) {
     seed = (Number.isInteger(seed) ? seed : 1) >>> 0;
     const random = mulberry32((seed ^ 0x6d2b79f5) >>> 0);
     const enemies = [];
     const packs = [
-      { stage:0, kind:'shade', hp:3, spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]] },
-      { stage:1, kind:'crawler', hp:4, spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-42,-65],[43,-95],[49,-101]] },
-      { stage:2, kind:'sentinel', hp:5, spots:[[-10,-132],[10,-132],[-6,-141],[7,-143],[0,-147]] }
+      { stage:0, kind:'shade', spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]] },
+      { stage:1, kind:'crawler', spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-42,-65],[43,-95]] },
+      { stage:1, kind:'spitter', spots:[[-16,-82],[18,-86]], optionalSpots:[[40,-100]] },
+      { stage:2, kind:'sentinel', spots:[[-10,-132],[10,-132],[-6,-141],[7,-143]], optionalSpots:[[20,-149]] },
+      { stage:2, kind:'charger', spots:[[-16,-139],[16,-141]] }
     ];
     for (const pack of packs) {
-      for (const [x,z] of pack.spots) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*3.4,z:z+(random()-.5)*3.4,hp:pack.hp,stage:pack.stage,boss:false,optional:false});
-      for (const [x,z] of (pack.optionalSpots||[])) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*2.2,z:z+(random()-.5)*2.2,hp:pack.hp,stage:pack.stage,boss:false,optional:true});
+      const hp=getRogueEnemyProfile(pack.kind,pack.stage).hp;
+      for (const [x,z] of pack.spots) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*3.4,z:z+(random()-.5)*3.4,hp,stage:pack.stage,boss:false,optional:false});
+      for (const [x,z] of (pack.optionalSpots||[])) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*2.2,z:z+(random()-.5)*2.2,hp,stage:pack.stage,boss:false,optional:true});
     }
     const baseChests=[[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
     const chests=baseChests.map(([x,z,stage])=>({
       x:x+(random()-.5)*(stage===1?4.5:3.2),
       z:z+(random()-.5)*(stage===1?4.0:3.0), stage
     }));
-    const boss={id:'boss',kind:'sentinel',x:0,z:-184,hp:42,stage:3,boss:true,optional:false};
+    const bossProfile=getRogueEnemyProfile('sentinel',3,true);
+    const boss={id:'boss',kind:'sentinel',x:0,z:-184,hp:bossProfile.hp,stage:3,boss:true,optional:false};
     return {seed,enemies,chests,boss};
   }
 
@@ -1656,8 +1678,9 @@
         const layout=getRogueDungeonLayout(seed);
         const enemyHp=new Map(layout.enemies.map(e=>[e.id,e.hp]));
         enemyHp.set(layout.boss.id,layout.boss.hp);
-        const enemyStates=new Map(layout.enemies.map(e=>[e.id,{x:e.x,z:e.z,homeX:e.x,homeZ:e.z,yaw:0,cooldown:0.8+Math.random()*0.9,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0}]));
-        enemyStates.set(layout.boss.id,{x:layout.boss.x,z:layout.boss.z,homeX:layout.boss.x,homeZ:layout.boss.z,yaw:0,cooldown:1.2,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0});
+        const initEnemyState=(e,cooldown)=>({x:e.x,z:e.z,homeX:e.x,homeZ:e.z,yaw:0,cooldown,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0,phase:'idle',windupTimer:0,recoverTimer:0,aimX:e.x,aimZ:e.z,attackRadius:1.5,attackMode:'',chargeDx:0,chargeDz:0,chargeTimer:0,chargeHit:false});
+        const enemyStates=new Map(layout.enemies.map(e=>[e.id,initEnemyState(e,0.8+Math.random()*0.9)]));
+        enemyStates.set(layout.boss.id,initEnemyState(layout.boss,1.2));
         room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:0,openGates:0,extractReady:false,openedChests:new Set(),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map(),memberCarry:new Map(),recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
         this.rogueRooms.set(partyKey,room);
         this.rogueRoomsById.set(room.id,room);
@@ -1762,77 +1785,138 @@
           }
         }
         if(state.patrolGoal&&state.path.length){
-          const speed=target.kind==='crawler'?0.72:target.kind==='sentinel'?0.48:0.62;
-          moveAlongPath(state,speed);
+          const profile=getRogueEnemyProfile(target.kind,target.stage,target.boss);
+          moveAlongPath(state,profile.patrolSpeed||0.6);
         }
       };
 
       if(members.length){
         const targets=[...layout.enemies,layout.boss];
+        const hurt=(victim,target,state,profile)=>{
+          if(!victim||victim.dead)return false;
+          const dx=victim.x-state.x,dz=victim.z-state.z,d=Math.hypot(dx,dz);
+          this.out.sendTo(victim.id,{t:'roguePlayerHurt',instanceId:room.id,sourceId:target.id,amount:profile.damage,dx:dx/(d||1),dz:dz/(d||1)});
+          state.attackPulse=0.28;
+          return true;
+        };
+        const beginWindup=(state,target,selected,profile,mode)=>{
+          state.phase='windup';state.windupTimer=profile.windup;state.targetId=selected.id;
+          state.aimX=selected.x;state.aimZ=selected.z;state.attackMode=mode;
+          state.attackRadius=profile.attackRadius;state.path=[];state.pathIndex=0;
+          const dx=selected.x-state.x,dz=selected.z-state.z;
+          if(Math.hypot(dx,dz)>1e-4)state.yaw=Math.atan2(-dx,-dz);
+        };
         for(const target of targets){
           const hp=room.enemyHp.get(target.id)||0,state=room.enemyStates.get(target.id);
           if(!state||hp<=0)continue;
+          const profile=getRogueEnemyProfile(target.kind,target.stage,target.boss);
           const encounterActive=target.boss?room.stage===3:(target.optional?target.stage<=room.stage:target.stage===room.stage);
           if(!encounterActive){
-            state.targetId=null;
-            state.attackPulse=0;
-            // ボスは見えない間は待機。雑魚は各自の出現区画から離れず巡回する。
+            if(state.phase==='windup'||state.phase==='charge'){state.phase='idle';state.windupTimer=0;state.chargeTimer=0;}
+            state.targetId=null;state.attackPulse=0;state.attackMode='';
             if(!target.boss)patrol(state,target);
             continue;
           }
           state.cooldown=Math.max(0,state.cooldown-dt);
           state.repath=Math.max(0,state.repath-dt);
           state.attackPulse=Math.max(0,state.attackPulse-dt);
+
+          // Wind-up attacks lock a visible danger area at the target's previous position;
+          // moving clear before the timer expires avoids the hit.
+          if(state.phase==='windup'){
+            state.windupTimer=Math.max(0,state.windupTimer-dt);
+            const ax=state.aimX-state.x,az=state.aimZ-state.z;
+            if(Math.hypot(ax,az)>1e-4)state.yaw=Math.atan2(-ax,-az);
+            if(state.windupTimer<=0){
+              if(profile.role==='charger'){
+                const d=Math.hypot(ax,az)||1;state.chargeDx=ax/d;state.chargeDz=az/d;
+                state.chargeTimer=0.82;state.chargeHit=false;state.phase='charge';state.attackMode='charge';
+              }else{
+                const victim=members.find(c=>c.id===state.targetId)||null;
+                if(victim&&Math.hypot(victim.x-state.aimX,victim.z-state.aimZ)<=profile.attackRadius){hurt(victim,target,state,profile);}
+                state.phase='recover';state.recoverTimer=profile.recovery;state.cooldown=profile.cooldown;state.attackMode='';
+              }
+            }
+            continue;
+          }
+          if(state.phase==='charge'){
+            const step=profile.chargeSpeed*dt;
+            const nx=state.x+state.chargeDx*step,nz=state.z+state.chargeDz*step;
+            if(isRogueDungeonWalkable(nx,nz,room.openGates)){
+              state.x=nx;state.z=nz;state.yaw=Math.atan2(-state.chargeDx,-state.chargeDz);
+            }else{
+              state.chargeTimer=0;
+            }
+            const victim=members.find(c=>c.id===state.targetId)||null;
+            if(victim&&!state.chargeHit&&Math.hypot(victim.x-state.x,victim.z-state.z)<=profile.attackRadius+0.55){
+              hurt(victim,target,state,profile);state.chargeHit=true;
+            }
+            state.chargeTimer-=dt;
+            if(state.chargeTimer<=0){state.phase='recover';state.recoverTimer=profile.recovery;state.cooldown=profile.cooldown;state.path=[];state.pathIndex=0;state.attackMode='';}
+            continue;
+          }
+          if(state.phase==='recover'){
+            state.recoverTimer=Math.max(0,state.recoverTimer-dt);
+            if(state.recoverTimer<=0)state.phase='idle';
+            continue;
+          }
+
           let selected=null,selectedPath=null,selectedD=Infinity;
-          // 入口直後にも敵が反応するよう追跡距離を広げる。閉じた門を経由する経路は共有歩行判定で拒否する。
-          const chaseRange=target.boss?42:45;
+          const chaseRange=profile.aggroRange;
           if(state.repath<=0||(state.targetId!==null&&state.path.length>0&&state.pathIndex>=state.path.length)){
             const ordered=members.map(c=>({c,d:Math.hypot(c.x-state.x,c.z-state.z)})).filter(v=>v.d<=chaseRange).sort((a,b)=>a.d-b.d);
             for(const candidate of ordered){
               const route=findRogueDungeonPath(state.x,state.z,candidate.c.x,candidate.c.z,room.openGates);
-              // 壁や閉鎖門の反対側にいる対象へ、距離だけで攻撃を通さない。
               if(route.length){selected=candidate.c;selectedPath=route;selectedD=candidate.d;break;}
             }
             if(selected){
               state.targetId=selected.id;state.path=selectedPath||[];state.pathIndex=0;
               state.patrolGoal=null;state.patrolTimer=0;
+              if(profile.role==='ranged'){
+                const dx=selected.x-state.x,dz=selected.z-state.z,d=Math.hypot(dx,dz)||1;
+                if(selectedD>=profile.minRange&&selectedD<=profile.attackRange){state.path=[];state.pathIndex=0;}
+                else{
+                  const goalX=selected.x-(dx/d)*profile.preferredRange,goalZ=selected.z-(dz/d)*profile.preferredRange;
+                  const rangedPath=isRogueDungeonWalkable(goalX,goalZ,room.openGates)?findRogueDungeonPath(state.x,state.z,goalX,goalZ,room.openGates):[];
+                  if(rangedPath.length){state.path=rangedPath;state.pathIndex=0;}else if(selectedD<profile.minRange){state.path=[];state.pathIndex=0;}
+                }
+              }
             }else{
-              // 標的がいない時も巡回用の経路を消さずに保持する。
               state.targetId=null;
             }
             state.repath=0.35;
-          } else {
+          }else{
             selected=members.find(c=>c.id===state.targetId)||null;
             if(selected)selectedD=Math.hypot(selected.x-state.x,selected.z-state.z);
           }
-          if(!selected){
-            state.targetId=null;
-            patrol(state,target);
-            continue;
-          }
+          if(!selected){state.targetId=null;patrol(state,target);continue;}
           state.patrolGoal=null;state.patrolTimer=0;
           const dx=selected.x-state.x,dz=selected.z-state.z,d=Math.hypot(dx,dz);
           if(d>1e-4)state.yaw=Math.atan2(-dx,-dz);
-          const attackRange=target.boss?3.3:1.65;
-          if(d<=attackRange){
+
+          if(profile.role==='ranged'){
+            if(d>=profile.minRange&&d<=profile.attackRange&&state.cooldown<=0){
+              beginWindup(state,target,selected,profile,'projectile');
+            }else if(d>profile.attackRange||d<profile.minRange){
+              if(!state.path.length||state.pathIndex>=state.path.length){state.repath=0;continue;}
+              moveAlongPath(state,profile.speed);
+            }else{state.path=[];state.pathIndex=0;}
+          }else if(profile.role==='charger'){
+            if(d<=profile.triggerRange&&state.cooldown<=0){beginWindup(state,target,selected,profile,'charge');}
+            else if(d>profile.attackRange&&d<chaseRange&&state.path.length&&state.pathIndex<state.path.length){moveAlongPath(state,profile.speed);}
+          }else if(d<=profile.attackRange){
             state.path=[];state.pathIndex=0;
-            if(state.cooldown<=0){
-              state.cooldown=target.boss?2.05:(target.kind==='sentinel'?1.8:1.35);
-              state.attackPulse=0.28;
-              const baseDamage=target.boss?7:3+target.stage;
-              this.out.sendTo(selected.id,{t:'roguePlayerHurt',instanceId:room.id,sourceId:target.id,amount:baseDamage,dx:dx/(d||1),dz:dz/(d||1)});
-            }
+            if(state.cooldown<=0)beginWindup(state,target,selected,profile,profile.role==='tank'||profile.role==='boss'?'slam':'melee');
           }else if(d<chaseRange){
             if(!state.path.length||state.pathIndex>=state.path.length){state.repath=0;continue;}
-            const speed=target.boss?1.45:(target.kind==='crawler'?2.7:target.kind==='sentinel'?1.8:2.3);
-            moveAlongPath(state,speed);
+            moveAlongPath(state,profile.speed);
           }
         }
       }
       room.motionTimer-=dt;
       if(room.motionTimer<=0){
         room.motionTimer=0.1;
-        const enemies=[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw),attack:e.attackPulse>0?1:0}));
+        const enemies=[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw),attack:e.attackPulse>0?1:0,phase:e.phase||'idle',attackMode:e.attackMode||'',aimX:r2(e.aimX??e.x),aimZ:r2(e.aimZ??e.z),attackRadius:r2(e.attackRadius||1.5)}));
         this.broadcastRogueRoom(room,{t:'rogueEnemyMotion',instanceId:room.id,enemies});
       }
     }
@@ -2742,7 +2826,7 @@
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
-    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, findRogueDungeonPath, getRogueDungeonLayout, getRogueChestReward,
+    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, findRogueDungeonPath, getRogueDungeonLayout, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
     getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
   };
 });

@@ -35,7 +35,9 @@ check('サーバー管理の敵位置スナップショットが部屋の全員�
 cA.x=moved.x;cA.z=moved.z;cA.lastStateAt=Date.now();
 for(const [id,state] of room.enemyStates)state.cooldown=20;
 room.enemyStates.get('e0').cooldown=0;room.enemyStates.get('e0').repath=0;room.enemyStates.get('e0').path=[];room.enemyStates.get('e0').pathIndex=0;
-const hurtStart=sent.length;sim.tick(.05);
+const hurtStart=sent.length;
+const shadeWindup=Shared.getRogueEnemyProfile('shade',0).windup;
+for(let i=0;i<Math.ceil(shadeWindup/.05)+2;i++)sim.tick(.05);
 const hurtEvents=sent.slice(hurtStart).filter(x=>x.msg.t==='roguePlayerHurt');
 check('敵の攻撃はサーバーで発生し、標的プレイヤーにだけ送信される',()=>{assert.ok(hurtEvents.some(x=>x.to===61&&x.msg.sourceId==='e0'));assert.equal(hurtEvents.some(x=>x.to===62),false);});
 // Dynamic server coordinates, not seed/layout coordinates, are authoritative for player hits.
