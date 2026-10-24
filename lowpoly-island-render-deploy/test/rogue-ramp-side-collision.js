@@ -1,4 +1,4 @@
-// v62.9: 坂の側面から乗り上げる侵入は止め、坂上から地面へ降りる移動は許す。
+// v64.0: 坂の側面から乗り上げる侵入は止め、坂上から地面へ降りる移動は許す。
 'use strict';
 const Shared = require('../public/shared.js');
 let failures = 0;
@@ -25,6 +25,16 @@ for (const a of ramps) {
   const start={x:a.ax-ux*0.8,z:a.az-uz*0.8}, entry={x:a.ax+ux*0.4,z:a.az+uz*0.4};
   check('坂の端から通路方向への進入は許可する',
     !Shared.isRogueRampSideEntryBlocked(start.x,start.z,entry.x,entry.z));
+  // 端の近くでも、横方向に坂へ乗り上げるのは許可しない。
+  const endT=Math.min(0.14,1.25/len);
+  for (const t of [endT*0.45, 1-endT*0.45]) {
+    const ecx=a.ax+dx*t, ecz=a.az+dz*t;
+    for (const sign of [-1,1]) {
+      const outer={x:ecx+nx*sign*(walkLimit+0.35),z:ecz+nz*sign*(walkLimit+0.35)};
+      const inner={x:ecx+nx*sign*(walkLimit-0.25),z:ecz+nz*sign*(walkLimit-0.25)};
+      check('坂の端に近い場所でも側面からの侵入は遮断する',Shared.isRogueRampSideEntryBlocked(outer.x,outer.z,inner.x,inner.z));
+    }
+  }
   if (ramps.indexOf(a) < 2) {
     const rampEdge={x:cx+nx*3.4,z:cz+nz*3.4};
     const groundSide={x:cx+nx*5.2,z:cz+nz*5.2};

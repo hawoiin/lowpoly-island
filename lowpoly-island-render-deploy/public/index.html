@@ -576,7 +576,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v62.9</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v64.0</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1703,6 +1703,77 @@ window.startGame = function(NETINIT){
   function isRogueWalkable(x,z,openGates){
     return Shared.isRogueDungeonWalkable(x,z,Number.isFinite(openGates)?openGates:(rogueRun?rogueRun.openGates:0));
   }
+  // v64.0: プレイヤー用の床面解決。XZ位置だけで床を1枚に決めず、
+  // 重なった上下階の候補を保持し、現在の足元高さから連続している床を選ぶ。
+  const ROGUE_MAX_STEP_UP = 0.45;
+  const ROGUE_AIRBORNE_FLOOR_TOLERANCE = 0.06;
+  const ROGUE_MOVE_SAMPLE_SPACING = 0.30;
+  function rogueFloorCandidatesAt(x,z,openGates=0){
+    if(!isRogueWalkable(x,z,openGates)) return [];
+    const ramps=[],segments=[],ellipses=[];
+    for(let i=0;i<ROGUE_WALK_AREAS.length;i++){
+      const a=ROGUE_WALK_AREAS[i];
+      if(a.type==='segment'){
+        const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
+        const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
+        const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
+        if(d>a.width*0.45)continue;
+        const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
+        const surface={id:`segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d,area:a};
+        if(surface.kind==='ramp')ramps.push(surface);else segments.push(surface);
+      }else if(a.type==='ellipse'){
+        // 上下階が重なる場所では、プレイヤーが今立っている階の床も候補に残す。
+        // 歩行可能領域の縮小半径ではなく、実際に描画する部屋床の半径に合わせる。
+        const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
+        if(metric<=1.035){ellipses.push({id:`ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});}
+      }
+    }
+    // 上下に重なった床を候補から捨てず、現在どの高さにいるかをもとに選択する。
+    // 坂を無条件に優先すると、低い床の上に投影上重なった坂へ吸い上げられるため、
+    // 傾斜面・平坦通路・部屋床をすべて候補として返す。
+    return [...ramps,...segments,...ellipses];
+  }
+  function rogueChooseConnectedFloor(candidates,referenceY,footY,airborne,preferredSurfaceId=null){
+    if(!Array.isArray(candidates)||!candidates.length)return null;
+    const eligible=candidates.filter(c=>
+      c.y<=referenceY+ROGUE_MAX_STEP_UP+1e-6 ||
+      (airborne===true && Number.isFinite(footY) && footY>=c.y-ROGUE_AIRBORNE_FLOOR_TOLERANCE)
+    );
+    if(!eligible.length)return null;
+    // 連続移動で使っていた同じ床面は、足元との高さ差が小さい間だけ維持する。
+    // 空中では足元が十分高い別の床へ達した場合、以前の低い床に固定しない。
+    const preferred=preferredSurfaceId&&eligible.find(c=>c.id===preferredSurfaceId);
+    if(preferred&&Math.abs(preferred.y-referenceY)<=ROGUE_MAX_STEP_UP+1e-6&&
+       !(airborne===true&&Number.isFinite(footY)&&Math.abs(preferred.y-footY)>ROGUE_MAX_STEP_UP+0.15)) return preferred;
+    eligible.sort((a,b)=>Math.abs(a.y-referenceY)-Math.abs(b.y-referenceY)||b.y-a.y);
+    return eligible[0];
+  }
+  function rogueAlignedRampCandidate(candidates,fromX,fromZ,toX,toZ,referenceY){
+    const dx=toX-fromX,dz=toZ-fromZ,length=Math.hypot(dx,dz);
+    if(length<1e-5)return null;
+    let best=null,bestScore=Infinity;
+    for(const c of candidates){
+      if(c.kind!=='ramp'||Math.abs(c.y-referenceY)>ROGUE_MAX_STEP_UP+1e-6)continue;
+      if(!c.area||c.d>c.area.width*0.28)continue;
+      const rx=c.area.bx-c.area.ax,rz=c.area.bz-c.area.az,rLen=Math.hypot(rx,rz)||1;
+      const alignment=Math.abs((dx*rx+dz*rz)/(length*rLen));
+      if(alignment<0.72)continue;
+      const score=Math.abs(c.y-referenceY)+c.d*0.02;
+      if(score<bestScore){best=c;bestScore=score;}
+    }
+    return best;
+  }
+  function roguePlayerFloorHeight(x,z){
+    const openGates=rogueRun?rogueRun.openGates:0;
+    const footY=player.position.y;
+    const candidates=rogueFloorCandidatesAt(x,z,openGates);
+    const isCurrentPosition=Math.hypot(x-player.position.x,z-player.position.z)<1e-4;
+    const preferredId=isCurrentPosition&&rogueRun?rogueRun.playerFloorSurfaceId:null;
+    const surface=rogueChooseConnectedFloor(candidates,footY,footY,!grounded,preferredId);
+    if(isCurrentPosition&&rogueRun&&surface)rogueRun.playerFloorSurfaceId=surface.id;
+    // 制約処理前の一時座標などで候補がない場合に限り従来値を使う。
+    return surface?surface.y:rogueFloorHeight(x,z);
+  }
   // カメラはプレイヤー本体より室内を広く映すため、歩行用の安全マージン外でも
   // 実際の床・坂が近ければその高さを使う。ただし裂け目の底なし区間は床なし扱い。
   function rogueCameraFloorHeight(x,z){
@@ -2546,31 +2617,53 @@ window.startGame = function(NETINIT){
     }
     updateRogueHud();
   }
-  // 坂の途中から横へ出る際、隣の床が坂面より大幅に高い場合は側面を壁として扱う。
-  // 高い床への移動を許すと、次の接地更新でプレイヤーが上へ瞬間移動したように見える。
-  // 低い床へ降りる移動や、端からの出入りは止めず、重力による落下をそのまま使う。
-  function rogueRampSideExitWouldStepUp(fromX,fromZ,toX,toZ){
-    const MAX_SIDE_STEP_UP=0.45;
-    for(const a of ROGUE_WALK_AREAS){
-      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
-      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz,len=Math.sqrt(len2);
-      if(len<1e-5)continue;
-      const project=(x,z)=>{
-        const t=((x-a.ax)*dx+(z-a.az)*dz)/len2;
-        return {t,d:pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)};
-      };
-      const from=project(fromX,fromZ),to=project(toX,toZ);
-      const endT=Math.min(0.14,1.25/len);
-      // 入口・出口付近は端から接続する通常の移動を優先する。
-      if(from.t<=endT||from.t>=1-endT||to.t<=endT||to.t>=1-endT)continue;
-      const walkLimit=a.width*0.45;
-      // 坂の内側から側面の外へ出る動きだけを調べる。
-      if(from.d>walkLimit+1e-5||to.d<=walkLimit)continue;
-      const fromY=rogueFloorHeight(fromX,fromZ);
-      const toY=rogueFloorHeight(toX,toZ);
-      if(toY-fromY>MAX_SIDE_STEP_UP)return true;
+  // すべてのダンジョン床で共通に使う移動検証。
+  // 坂専用の例外ではなく、移動経路を短い区間に分けて、歩行可能領域・側面侵入・
+  // 現在の床から登れる高さを同じ順序で確認する。下降は重力に任せる。
+  function rogueDungeonMovePathAllowed(fromX,fromZ,toX,toZ,openGates,footY,airborne){
+    if(![fromX,fromZ,toX,toZ].every(Number.isFinite))return false;
+    const rampSideEntryBlocked=Shared.isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ);
+    const dx=toX-fromX,dz=toZ-fromZ,distance=Math.hypot(dx,dz);
+    const steps=Math.max(1,Math.min(128,Math.ceil(distance/ROGUE_MOVE_SAMPLE_SPACING)));
+    const startCandidates=rogueFloorCandidatesAt(fromX,fromZ,openGates);
+    const preferredId=rogueRun?rogueRun.playerFloorSurfaceId:null;
+    let previous=rogueChooseConnectedFloor(startCandidates,footY,footY,airborne,preferredId);
+    // 坂の低い接続端では床と傾斜面の高さがほぼ同じ。移動方向が坂の軸と一致し、
+    // かつ足元から小さな段差以内なら、進行する床として坂面へ接続できる。
+    const rampEntry=rampSideEntryBlocked?null:rogueAlignedRampCandidate(startCandidates,fromX,fromZ,toX,toZ,footY);
+    if(rampEntry)previous=rampEntry;
+    if(!previous)return false;
+    for(let i=1;i<=steps;i++){
+      const t=i/steps,x=fromX+dx*t,z=fromZ+dz*t;
+      if(!isRogueWalkable(x,z,openGates))return false;
+      const candidates=rogueFloorCandidatesAt(x,z,openGates);
+      const next=rogueChooseConnectedFloor(candidates,previous.y,footY,airborne,previous.id);
+      if(!next)return false;
+      // 旧来の側面侵入防止は維持する。ただし、重なった別の階の床が連続している場合は
+      // その床を歩くことまで止めない。床のない場所で坂面へ乗り移ろうとする時だけ遮断。
+      if(rampSideEntryBlocked&&previous.kind!=='ramp'&&next.kind==='ramp')return false;
+      if(next.y-previous.y>ROGUE_MAX_STEP_UP+1e-6 && !(airborne && footY>=next.y-ROGUE_AIRBORNE_FLOOR_TOLERANCE))return false;
+      previous=next;
     }
-    return false;
+    if(rogueRun)rogueRun.playerFloorSurfaceId=previous.id;
+    return true;
+  }
+  function constrainRogueDungeonPosition(pos){
+    if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
+    const last=rogueRun.lastPos||{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z};
+    const openGates=rogueRun.openGates;
+    const footY=player.position.y,airborne=!grounded;
+    // 正面移動だけでなく、壁際でのX/Z方向スライドも同じ床高・側面ルールを通す。
+    // 旧処理はスライド経路だけ高さチェックを迂回でき、坂以外の段差でも挙動がずれた。
+    const tryMove=(x,z)=>{
+      if(!isRogueWalkable(x,z,openGates))return false;
+      if(!rogueDungeonMovePathAllowed(last.x,last.z,x,z,openGates,footY,airborne))return false;
+      pos.x=x;pos.z=z;rogueRun.lastPos={x,z};return true;
+    };
+    if(tryMove(pos.x,pos.z))return;
+    if(tryMove(pos.x,last.z))return;
+    if(tryMove(last.x,pos.z))return;
+    pos.x=last.x;pos.z=last.z;
   }
   function constrainRogueDungeonPosition(pos){
     if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
@@ -2655,7 +2748,7 @@ window.startGame = function(NETINIT){
 
   // プレイヤーの足場の高さ(洞窟内は平らな床、屋外は地表)
   function getPlayerFloor(x, z){
-    if (inCaveIndex===ROGUE_DUNGEON_INDEX) return { y: rogueFloorHeight(x,z), inCave:true };
+    if (inCaveIndex===ROGUE_DUNGEON_INDEX) return { y: roguePlayerFloorHeight(x,z), inCave:true };
     if (inCaveIndex >= 0) return { y: INTERIOR_FLOOR_Y, inCave:true };
     return { y: islandHeight(x, z), inCave:false };
   }
@@ -7769,10 +7862,26 @@ window.startGame = function(NETINIT){
       landSquash = 0.6; // 踏み切りの瞬間、着地と同じ「つぶれ」を軽くかけて予備動作にする
       sfx.jump();
     }
+    const isRogueDungeonFloor = inCaveIndex===ROGUE_DUNGEON_INDEX;
+    // ダンジョンでは、接続した床面上の小さな高低差は足元を追従させる。
+    // 大きく低い床へ出た場合は接地を解除し、瞬時に落とさず重力で落下させる。
+    if(isRogueDungeonFloor && grounded){
+      const floorDelta=groundY-player.position.y;
+      if(Math.abs(floorDelta)<=ROGUE_MAX_STEP_UP+1e-6){player.position.y=groundY;vy=0;}
+      else grounded=false;
+    }
+    const yBeforeGravity=player.position.y;
     vy += GRAV * dt;
     player.position.y += vy * dt;
     wasGrounded = grounded;
-    if (player.position.y <= groundY){
+    if(isRogueDungeonFloor){
+      if(grounded && player.position.y<=groundY){
+        player.position.y=groundY;vy=0;grounded=true;
+      }else if(!grounded && vy<=0 && yBeforeGravity>=groundY-1e-4 && player.position.y<=groundY){
+        // 空中では上昇中や床の下からではなく、上から実際に床面を横切った時だけ着地する。
+        player.position.y=groundY;vy=0;grounded=true;
+      }else grounded=false;
+    }else if(player.position.y<=groundY){
       player.position.y = groundY;
       vy = 0;
       grounded = true;
@@ -9678,7 +9787,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=62.9-ramp-side-height-aware-exit"></script>
+<script src="shared.js?v=64.0-unified-dungeon-floor-movement"></script>
 <script src="boot.js"></script>
 </body>
 </html>

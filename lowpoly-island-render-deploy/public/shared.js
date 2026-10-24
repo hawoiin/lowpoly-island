@@ -219,9 +219,16 @@
         return {t,d:Math.hypot(x-qx,z-qz)};
       };
       const from=point(fromX,fromZ),to=point(toX,toZ);
-      // 入口と出口の端から約1.25mは開けておく。中央部の側面だけを壁として扱う。
+      // 端からの通常の出入りは許可する。ただし、端の近くでも横方向に側面を
+      // 横切る動きは別扱いにする。以前は to.t だけを見ていたため、端の横から
+      // 坂へ乗り上げる動きまで見逃していた。
       const endT=Math.min(0.14,1.25/len);
-      if(to.t<=endT||to.t>=1-endT)continue;
+      const alongDistance=Math.abs(to.t-from.t)*len;
+      const sideDistance=Math.abs(to.d-from.d);
+      const towardStart=to.t<from.t&&(from.t<=endT||to.t<=endT);
+      const towardFinish=to.t>from.t&&(from.t>=1-endT||to.t>=1-endT);
+      const traversesEndpoint=(towardStart||towardFinish)&&alongDistance>Math.max(0.55,sideDistance*1.25);
+      if(traversesEndpoint)continue;
       // 坂の歩行可能判定・床高補間と同じ境界にそろえる。
       // 見た目の側壁より外側を境界にすると、地面へ降りた後で見えない壁に引っ掛かる。
       const walkLimit=a.width*0.45;
