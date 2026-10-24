@@ -1561,13 +1561,80 @@
       };
     }
 
-    rogueRoomSnapshot(room) {
+    rogueRecoveryBagSnapshot(room, clientId) {
+      const client=this.clients.get(clientId);
+      const ownerPid=client && client.pid ? client.pid : `session:${clientId}`;
+      return [...room.recoveryBags.values()].map(bag=>({
+        bagId:bag.bagId, x:r2(bag.x), z:r2(bag.z), remainingMs:Math.max(0,Math.floor(bag.remainingMs)),
+        ownerName:bag.ownerName, mine:bag.ownerPid===ownerPid, running:!!room.recoveryTimerActive
+      }));
+    }
+
+    rogueRoomSnapshot(room, clientId) {
       return {
         t:'rogueRoomJoined', instanceId:room.id, seed:room.seed, partyCode:room.partyCode || '',
         stage:room.stage, openGates:room.openGates, extractReady:room.extractReady,
         openedChests:[...room.openedChests], enemyHp:Object.fromEntries(room.enemyHp),
         enemyPositions:[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw)})),
+        recoveryBags:this.rogueRecoveryBagSnapshot(room,clientId)
       };
+    }
+
+    broadcastRogueRecoveryState(room) {
+      if(!room)return;
+      const sent=new Set();
+      for(const memberId of room.members){
+        this.out.sendTo(memberId,{t:'rogueRecoveryBagState',instanceId:room.id,bags:this.rogueRecoveryBagSnapshot(room,memberId)});
+        sent.add(memberId);
+      }
+      // 遺品の持ち主が島側へ戻っていても、制限時間をHUDへ反映する。
+      for(const bag of room.recoveryBags.values()){
+        for(const c of this.clients.values()){
+          if(c.joined&&c.pid===bag.ownerPid&&!sent.has(c.id)){
+            this.out.sendTo(c.id,{t:'rogueRecoveryBagState',instanceId:room.id,bags:this.rogueRecoveryBagSnapshot(room,c.id)});
+            sent.add(c.id);
+          }
+        }
+      }
+    }
+
+    rogueCarryPayload(raw) {
+      const boundedInt=(v,max)=>Number.isFinite(Number(v))?Math.max(0,Math.min(max,Math.floor(Number(v)))):0;
+      return {
+        weaponBonus:boundedInt(raw && raw.weaponBonus,3),
+        armorBonus:boundedInt(raw && raw.armorBonus,2),
+        shards:boundedInt(raw && raw.shards,999999),
+        attackBuffMs:boundedInt(raw && raw.attackBuffMs,120000),
+        speedBuffMs:boundedInt(raw && raw.speedBuffMs,120000)
+      };
+    }
+
+    hasRogueCarry(payload) {
+      return !!payload && (payload.weaponBonus>0 || payload.armorBonus>0 || payload.shards>0 || payload.attackBuffMs>0 || payload.speedBuffMs>0);
+    }
+
+    createRogueRecoveryBag(room, owner, rawPayload, position) {
+      if(!room || !owner || !owner.pid || room.recoveryBags.has(owner.pid))return null;
+      const payload=this.rogueCarryPayload(rawPayload);
+      if(!this.hasRogueCarry(payload))return null;
+      const x=Number(position && position.x), z=Number(position && position.z);
+      if(!Number.isFinite(x)||!Number.isFinite(z)||!isRogueDungeonWalkable(x,z,room.openGates))return null;
+      const bag={
+        bagId:`${room.id}-bag-${room.recoverySeq++}`, ownerPid:owner.pid,
+        ownerName:typeof owner.name==='string'&&owner.name?owner.name.slice(0,24):'旅人',
+        x,z,remainingMs:7*60*1000,payload
+      };
+      room.recoveryBags.set(owner.pid,bag);
+      room.lastEmptyAt=0;
+      return bag;
+    }
+
+    deleteRogueRoomIfUnused(room, now=Date.now()) {
+      if(!room || room.members.size!==0)return false;
+      if(room.recoveryBags.size===0 || (room.lastEmptyAt && now-room.lastEmptyAt>24*60*60*1000)){
+        this.rogueRooms.delete(room.key);this.rogueRoomsById.delete(room.id);return true;
+      }
+      return false;
     }
 
     getRogueRoomForClient(id) {
@@ -1582,22 +1649,22 @@
       if(!c || c.cave!==ROGUE_DUNGEON_INDEX) return;
       // 新クライアントはソロまたは6文字のパーティーコードを先に送信する。
       // 古いクライアントは個別ランへ入れ、意図しない全員共有を防ぐ。
-      const partyKey=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${id}`;
+      const partyKey=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${c.pid || id}`;
       let room=this.rogueRooms.get(partyKey);
       if(!room) {
         const seed=Math.floor(Math.random()*4294967296)>>>0;
         const layout=getRogueDungeonLayout(seed);
         const enemyHp=new Map(layout.enemies.map(e=>[e.id,e.hp]));
         enemyHp.set(layout.boss.id,layout.boss.hp);
-        const enemyStates=new Map(layout.enemies.map(e=>[e.id,{x:e.x,z:e.z,yaw:0,cooldown:0.8+Math.random()*0.9,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0}]));
-        enemyStates.set(layout.boss.id,{x:layout.boss.x,z:layout.boss.z,yaw:0,cooldown:1.2,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0});
-        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:0,openGates:0,extractReady:false,openedChests:new Set(),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0};
+        const enemyStates=new Map(layout.enemies.map(e=>[e.id,{x:e.x,z:e.z,homeX:e.x,homeZ:e.z,yaw:0,cooldown:0.8+Math.random()*0.9,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0}]));
+        enemyStates.set(layout.boss.id,{x:layout.boss.x,z:layout.boss.z,homeX:layout.boss.x,homeZ:layout.boss.z,yaw:0,cooldown:1.2,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0});
+        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:0,openGates:0,extractReady:false,openedChests:new Set(),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map(),memberCarry:new Map(),recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
         this.rogueRooms.set(partyKey,room);
         this.rogueRoomsById.set(room.id,room);
       }
       c.rogueRoomKey=partyKey;
-      room.members.add(id);
-      this.out.sendTo(id,this.rogueRoomSnapshot(room));
+      room.members.add(id);room.lastEmptyAt=0;
+      this.out.sendTo(id,this.rogueRoomSnapshot(room,id));
       this.broadcastRogueRoom(room,{t:'rogueRoomMembers',instanceId:room.id,count:room.members.size,joined:id},id);
     }
 
@@ -1606,11 +1673,11 @@
       const room=this.getRogueRoomForClient(id);
       if(!room) { if(c)c.rogueRoomKey=null; return; }
       room.members.delete(id);
-      if(c)c.rogueRoomKey=null;
+      if(c){c.rogueRoomKey=null;if(c.pid)room.memberCarry.delete(c.pid);}
       for(const key of this.rogueHitCooldowns.keys()) if(key.startsWith(`${id}:`)) this.rogueHitCooldowns.delete(key);
       if(room.members.size===0) {
-        this.rogueRooms.delete(room.key);
-        this.rogueRoomsById.delete(room.id);
+        room.lastEmptyAt=Date.now();
+        this.deleteRogueRoomIfUnused(room,room.lastEmptyAt);
         return;
       }
       this.broadcastRogueRoom(room,{t:'rogueRoomMembers',instanceId:room.id,count:room.members.size,left:id});
@@ -1632,33 +1699,118 @@
     }
 
     updateRogueRoom(room, dt, now) {
-      if(!room||room.members.size===0)return;
+      if(!room)return;
       const layout=getRogueDungeonLayout(room.seed);
       const members=[...room.members].map(id=>this.clients.get(id)).filter(c=>c&&c.joined&&!c.dead&&c.hasState&&c.cave===ROGUE_DUNGEON_INDEX&&now-(c.lastStateAt||0)<5000);
+      // 回収タイマーは誰かがゲーム内で生存・接続中の間だけ進む。ログアウト中は止める。
+      const ownerOnline=[...room.recoveryBags.values()].some(bag=>[...this.clients.values()].some(c=>c.joined&&!c.dead&&c.hasState&&c.pid===bag.ownerPid&&now-(c.lastStateAt||0)<5000));
+      room.recoveryTimerActive=members.length>0||ownerOnline;
+      if(room.recoveryTimerActive){
+        let changed=false;
+        for(const [ownerPid,bag] of room.recoveryBags){
+          const before=Math.ceil(bag.remainingMs/1000);
+          bag.remainingMs=Math.max(0,bag.remainingMs-Math.max(0,dt)*1000);
+          if(Math.ceil(bag.remainingMs/1000)!==before)changed=true;
+          if(bag.remainingMs<=0){
+            room.recoveryBags.delete(ownerPid);changed=true;
+            for(const c of this.clients.values())if(c.pid===ownerPid&&c.joined)this.out.sendTo(c.id,{t:'rogueRecoveryExpired',instanceId:room.id,bagId:bag.bagId});
+          }
+        }
+        room.recoveryStateTimer-=dt;
+        if(changed||room.recoveryStateTimer<=0){room.recoveryStateTimer=1;this.broadcastRogueRecoveryState(room);}
+      }
+      if(room.members.size===0){
+        this.deleteRogueRoomIfUnused(room,now);
+        return;
+      }
+
+      // 共通の経路追従。敵の移動はサーバーだけで計算し、クライアントは位置を描画する。
+      const moveAlongPath=(state,speed)=>{
+        if(!state.path||!state.path.length||state.pathIndex>=state.path.length)return false;
+        const waypoint=state.path[state.pathIndex],wx=waypoint.x-state.x,wz=waypoint.z-state.z,wd=Math.hypot(wx,wz);
+        if(wd<0.2){
+          state.pathIndex++;
+          if(state.pathIndex>=state.path.length){state.path=[];state.pathIndex=0;state.repath=0;}
+          return true;
+        }
+        const step=Math.min(wd,speed*dt),nx=state.x+wx/(wd||1)*step,nz=state.z+wz/(wd||1)*step;
+        if(!isRogueDungeonWalkable(nx,nz,room.openGates)){
+          state.path=[];state.pathIndex=0;state.repath=0;return false;
+        }
+        state.x=nx;state.z=nz;state.yaw=Math.atan2(-wx,-wz);return true;
+      };
+
+      // 敵は担当区画の周囲を巡回する。未解放区画の敵は攻撃・追跡をせず、遠景でも置物に見えない程度に動く。
+      const patrol=(state,target)=>{
+        state.patrolTimer=Math.max(0,(state.patrolTimer||0)-dt);
+        const goal=state.patrolGoal;
+        const arrived=goal&&Math.hypot(goal.x-state.x,goal.z-state.z)<0.6;
+        if(!goal||state.patrolTimer<=0||arrived||!state.path||!state.path.length){
+          state.patrolGoal=null;state.path=[];state.pathIndex=0;
+          state.patrolTimer=2.5+Math.random()*2.0;
+          const hx=Number.isFinite(state.homeX)?state.homeX:target.x;
+          const hz=Number.isFinite(state.homeZ)?state.homeZ:target.z;
+          for(let attempt=0;attempt<14;attempt++){
+            const a=Math.random()*Math.PI*2,r=1.0+Math.random()*2.4;
+            const gx=hx+Math.cos(a)*r,gz=hz+Math.sin(a)*r;
+            if(!isRogueDungeonWalkable(gx,gz,room.openGates))continue;
+            const route=findRogueDungeonPath(state.x,state.z,gx,gz,room.openGates);
+            if(!route.length)continue;
+            state.patrolGoal={x:route[route.length-1].x,z:route[route.length-1].z};
+            state.path=route;state.pathIndex=0;
+            break;
+          }
+        }
+        if(state.patrolGoal&&state.path.length){
+          const speed=target.kind==='crawler'?0.72:target.kind==='sentinel'?0.48:0.62;
+          moveAlongPath(state,speed);
+        }
+      };
+
       if(members.length){
         const targets=[...layout.enemies,layout.boss];
         for(const target of targets){
           const hp=room.enemyHp.get(target.id)||0,state=room.enemyStates.get(target.id);
           if(!state||hp<=0)continue;
-          if(target.boss ? room.stage!==3 : ((!target.optional&&target.stage!==room.stage)||(target.optional&&target.stage>room.stage)))continue;
+          const encounterActive=target.boss?room.stage===3:(target.optional?target.stage<=room.stage:target.stage===room.stage);
+          if(!encounterActive){
+            state.targetId=null;
+            state.attackPulse=0;
+            // ボスは見えない間は待機。雑魚は各自の出現区画から離れず巡回する。
+            if(!target.boss)patrol(state,target);
+            continue;
+          }
           state.cooldown=Math.max(0,state.cooldown-dt);
           state.repath=Math.max(0,state.repath-dt);
           state.attackPulse=Math.max(0,state.attackPulse-dt);
           let selected=null,selectedPath=null,selectedD=Infinity;
-          // 0.35秒ごとに経路と標的を選び直す。近い標的へ直進するだけで壁・裂け目に突っ込まない。
-          if(state.repath<=0||(state.path.length>0&&state.pathIndex>=state.path.length)){
-            const ordered=members.map(c=>({c,d:Math.hypot(c.x-state.x,c.z-state.z)})).filter(v=>v.d<=(target.boss?34:29)).sort((a,b)=>a.d-b.d);
+          // 入口直後にも敵が反応するよう追跡距離を広げる。閉じた門を経由する経路は共有歩行判定で拒否する。
+          const chaseRange=target.boss?42:45;
+          if(state.repath<=0||(state.targetId!==null&&state.path.length>0&&state.pathIndex>=state.path.length)){
+            const ordered=members.map(c=>({c,d:Math.hypot(c.x-state.x,c.z-state.z)})).filter(v=>v.d<=chaseRange).sort((a,b)=>a.d-b.d);
             for(const candidate of ordered){
               const route=findRogueDungeonPath(state.x,state.z,candidate.c.x,candidate.c.z,room.openGates);
-              if(candidate.d<=(target.boss?3.3:1.65)||route.length){selected=candidate.c;selectedPath=route;selectedD=candidate.d;break;}
+              // 壁や閉鎖門の反対側にいる対象へ、距離だけで攻撃を通さない。
+              if(route.length){selected=candidate.c;selectedPath=route;selectedD=candidate.d;break;}
             }
-            state.targetId=selected?selected.id:null;
-            state.path=selectedPath||[];state.pathIndex=0;state.repath=0.35;
+            if(selected){
+              state.targetId=selected.id;state.path=selectedPath||[];state.pathIndex=0;
+              state.patrolGoal=null;state.patrolTimer=0;
+            }else{
+              // 標的がいない時も巡回用の経路を消さずに保持する。
+              state.targetId=null;
+            }
+            state.repath=0.35;
           } else {
             selected=members.find(c=>c.id===state.targetId)||null;
             if(selected)selectedD=Math.hypot(selected.x-state.x,selected.z-state.z);
           }
-          if(!selected){state.targetId=null;state.path=[];state.pathIndex=0;state.repath=0.35;continue;}
+          if(!selected){
+            state.targetId=null;
+            patrol(state,target);
+            continue;
+          }
+          state.patrolGoal=null;state.patrolTimer=0;
           const dx=selected.x-state.x,dz=selected.z-state.z,d=Math.hypot(dx,dz);
           if(d>1e-4)state.yaw=Math.atan2(-dx,-dz);
           const attackRange=target.boss?3.3:1.65;
@@ -1670,22 +1822,10 @@
               const baseDamage=target.boss?7:3+target.stage;
               this.out.sendTo(selected.id,{t:'roguePlayerHurt',instanceId:room.id,sourceId:target.id,amount:baseDamage,dx:dx/(d||1),dz:dz/(d||1)});
             }
-          }else if(d<(target.boss?34:29)){
-            if(!state.path.length||state.pathIndex>=state.path.length){
-              // 経路がない時は移動させず、プレイヤーや壁を貫通するフォールバックを行わない。
-              continue;
-            }
-            const waypoint=state.path[state.pathIndex],wx=waypoint.x-state.x,wz=waypoint.z-state.z,wd=Math.hypot(wx,wz);
-            if(wd<0.18){
-              state.pathIndex++;
-              if(state.pathIndex>=state.path.length){state.path=[];state.pathIndex=0;state.repath=0;}
-            }
-            else {
-              const speed=target.boss?1.45:(target.kind==='crawler'?2.7:target.kind==='sentinel'?1.8:2.3);
-              const step=Math.min(wd,speed*dt),nx=state.x+wx/(wd||1)*step,nz=state.z+wz/(wd||1)*step;
-              if(isRogueDungeonWalkable(nx,nz,room.openGates)){state.x=nx;state.z=nz;}
-              else {state.path=[];state.pathIndex=0;state.repath=0;}
-            }
+          }else if(d<chaseRange){
+            if(!state.path.length||state.pathIndex>=state.path.length){state.repath=0;continue;}
+            const speed=target.boss?1.45:(target.kind==='crawler'?2.7:target.kind==='sentinel'?1.8:2.3);
+            moveAlongPath(state,speed);
           }
         }
       }
@@ -1703,6 +1843,14 @@
 
     removeClient(id) {
       const c = this.clients.get(id);
+      // 生存中に切断した場合も、最後に同期された携行データがあれば死亡時と同じ遺品袋を残す。
+      if(c && c.cave===ROGUE_DUNGEON_INDEX && !c.dead && c.rogueRoomKey && c.pid){
+        const room=this.rogueRooms.get(c.rogueRoomKey),payload=room&&room.memberCarry.get(c.pid);
+        if(room && payload && !room.recoveryBags.has(c.pid)){
+          const bag=this.createRogueRecoveryBag(room,c,payload,{x:c.x,z:c.z});
+          if(bag){room.memberCarry.delete(c.pid);this.broadcastRogueRecoveryState(room);}
+        }
+      }
       if(c && c.rogueRoomKey) this.leaveRogueRoom(id);
       this.clients.delete(id);
       if (c && c.joined) this.out.broadcast({ t: 'leave', id }, id);
@@ -1735,7 +1883,7 @@
           const mode=msg.mode==='solo'?'solo':(msg.mode==='create'||msg.mode==='join'?'party':'');
           if(!mode) { c.roguePartyKey=null; this.out.sendTo(id,{t:'roguePartySelected',ok:false,reason:'invalid-mode'}); return; }
           if(mode==='solo') {
-            c.roguePartyKey=`solo:${id}`;
+            c.roguePartyKey=`solo:${c.pid || id}`;
             this.out.sendTo(id,{t:'roguePartySelected',ok:true,mode:'solo',code:''});
           } else {
             const code=typeof msg.code==='string'?msg.code.trim().toUpperCase():'';
@@ -1824,6 +1972,44 @@
           c.dead = !!(c.flags & 8);
           if(previousCave!==ROGUE_DUNGEON_INDEX && c.cave===ROGUE_DUNGEON_INDEX) this.joinRogueRoom(id);
           else if(previousCave===ROGUE_DUNGEON_INDEX && c.cave!==ROGUE_DUNGEON_INDEX) this.leaveRogueRoom(id);
+          break;
+        }
+        case 'rogueCarryState': {
+          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.pid) return;
+          const room=this.getRogueRoomForClient(id);if(!room)return;
+          const payload=this.rogueCarryPayload(msg);
+          if(this.hasRogueCarry(payload))room.memberCarry.set(c.pid,payload);
+          else room.memberCarry.delete(c.pid);
+          break;
+        }
+        case 'rogueRecoveryDrop': {
+          if(!c.joined || !c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState || !c.pid) {
+            this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'invalid-state'});return;
+          }
+          const room=this.getRogueRoomForClient(id);if(!room){this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'no-room'});return;}
+          if(room.recoveryBags.has(c.pid)){this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'already-dropped'});return;}
+          // 死亡時の要求に含まれる装備値は信用せず、直前に同期したサーバー側の携行状態だけを使う。
+          // 最後の同期がまだなければ何も落とさず、クライアントからの値で装備を増殖させない。
+          const cachedPayload=room.memberCarry.get(c.pid);
+          const payload=cachedPayload?this.rogueCarryPayload(cachedPayload):this.rogueCarryPayload({});
+          const bag=this.createRogueRecoveryBag(room,c,payload,{x:c.x,z:c.z});
+          room.memberCarry.delete(c.pid);
+          if(!bag){this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'no-items'});return;}
+          this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:true,bagId:bag.bagId,remainingMs:bag.remainingMs});
+          this.broadcastRogueRecoveryState(room);
+          break;
+        }
+        case 'rogueRecoveryClaim': {
+          const reply=result=>this.out.sendTo(id,Object.assign({t:'rogueRecoveryClaimResult',instanceId:(c&&c.rogueRoomKey&&this.rogueRooms.get(c.rogueRoomKey)?.id)||0},result));
+          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState || !c.pid){reply({ok:false,reason:'invalid-state'});return;}
+          const room=this.getRogueRoomForClient(id);if(!room){reply({ok:false,reason:'no-room'});return;}
+          const bag=room.recoveryBags.get(c.pid);
+          if(!bag || (typeof msg.bagId==='string'&&msg.bagId!==bag.bagId)){reply({ok:false,reason:'not-found'});return;}
+          if(bag.remainingMs<=0){room.recoveryBags.delete(c.pid);this.broadcastRogueRecoveryState(room);reply({ok:false,reason:'expired'});return;}
+          if(distanceXZ(c.x,c.z,bag.x,bag.z)>3.6){reply({ok:false,reason:'too-far'});return;}
+          room.recoveryBags.delete(c.pid);room.memberCarry.delete(c.pid);
+          reply({ok:true,bagId:bag.bagId,payload:bag.payload,restoredBuffRatio:0.5});
+          this.broadcastRogueRecoveryState(room);
           break;
         }
         case 'rogueChestOpen': {

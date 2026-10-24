@@ -23,13 +23,13 @@ check('移動境界と床は同じ歩行領域を参照し、封印門で進行�
 check('敵AI・標的選択・移動・攻撃ダメージはサーバーが管理し、クライアントは位置を補間する',html.includes('function updateRogueDungeon(dt)')&&html.includes('e.targetX-e.mesh.position.x')&&shared.includes('for(const room of this.rogueRooms.values()) this.updateRogueRoom(room, dt, now)')&&shared.includes('roguePlayerHurt')&&shared.includes('findRogueDungeonPath')); 
 check('帰還インタラクトのkindは文字列として定義されReferenceErrorを起こさない',html.includes("nearest={kind:'rogueReturn'}")&&!html.includes('nearest={kind:rogueReturn}'));
 check('敵と宝箱は各エリアの床高に置かれる',html.includes('g.position.set(x,rogueFloorHeight(x,z),z)')&&html.includes('e.mesh.position.y=rogueFloorHeight(e.mesh.position.x,e.mesh.position.z)'));
-check('装備進行モジュールはゲーム本体より先にロードされる', html.indexOf('rogue-progression.js?v=61.3-party-instances') < html.indexOf('window.startGame = function'));
+check('装備進行モジュールはHTMLにインライン同梱されstartGameより先に定義される', html.indexOf('v61.5: progression module is bundled inline') < html.indexOf('window.startGame = function') && !html.includes('<script src=\"rogue-progression.js'));
 check('戦利品・生還持ち越し・死亡ロスト・装備保管庫がある',html.includes('function openRogueChest')&&html.includes('RogueProgression.survive(rogueProgress,rogueRun,localStorage)')&&html.includes('RogueProgression.die(rogueProgress,localStorage)')&&html.includes('rogueStoreWeapon')&&html.includes('rogueTakeWeapon'));
 check('恒久的な攻撃・防御ステータス購入を廃止し、欠片は保管庫装備購入に使用',html.includes('RogueProgression.buyStoredGear')&&!html.includes('rogueMeta.attack++')&&!html.includes('rogueMeta.armor++'));
 check('死亡ロストは死亡画面より先に保存され、リロードで携行装備を復元できない', /function killPlayer\(\)\{[\s\S]*?RogueProgression\.die\(rogueProgress,localStorage\); saveRogueMeta\(\);[\s\S]*?deathOverlay.*?classList\.add\('show'\)/.test(html));
-check('枝道の敵は任意で、倒さなくても本線の進行を止めない',shared.includes('optionalSpots:[[-42,-65],[43,-95],[49,-101]]')&&html.includes('e.stage===rogueRun.stage&&!e.optional&&e.hp>0')&&shared.includes('target.optional&&target.stage>room.stage')&&html.includes('(e.stage===rogueRun.stage||e.optional)'));
+check('枝道の敵は任意で、倒さなくても本線の進行を止めない',shared.includes('optionalSpots:[[-42,-65],[43,-95],[49,-101]]')&&html.includes('e.stage===rogueRun.stage&&!e.optional&&e.hp>0')&&shared.includes('target.optional?target.stage<=room.stage:target.stage===room.stage')&&html.includes('(e.stage===rogueRun.stage||e.optional)'));
 check('枝道の敵はミニマップに残り、本線の残り数には含めない',html.includes('e.optional?1.25:1.7')&&html.includes('stage===rogueRun.stage&&!e.optional&&e.hp>0&&!e.dying'));
 check('死亡時は未精算の欠片と装備を失い、島へ帰還する',html.includes('leaveRogueDungeon(false,true)')&&html.includes('冒険失敗'));
 check('通常洞窟の半径13.5m制限は維持',/const CAVE_ROOM_R = 13\.5/.test(html)&&/const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v61.3バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v61\.3<\/div>/.test(html)&&html.includes('shared.js?v=61.3-party-instances'));
+check('v61.6バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v61\.6<\/div>/.test(html)&&html.includes('shared.js?v=61.6-enemy-patrol'));
 if(failures)process.exit(1);console.log('Rogue dungeon checks passed.');

@@ -559,6 +559,8 @@
     border-radius:8px; border:1px solid #58777d; background:#243d45; color:#f2f4ef; font-weight:700; cursor:pointer; }
   #roguePartyCreate { background:#2a665f !important; border-color:#5fc6b4 !important; }
   #roguePartySolo, #roguePartyCancel { background:transparent !important; border-color:rgba(255,255,255,.2) !important; }
+  #rogueRecoveryStatus { display:none; position:fixed; z-index:27; top:calc(env(safe-area-inset-top,0px) + 12px); left:50%; transform:translateX(-50%); max-width:min(92vw,520px); box-sizing:border-box; padding:8px 12px; border:1px solid rgba(125,223,224,.62); border-radius:9px; background:rgba(12,20,27,.88); color:#baf5e9; font-size:12px; line-height:1.4; text-align:center; pointer-events:none; box-shadow:0 5px 20px rgba(0,0,0,.22); }
+  #rogueRecoveryStatus.show { display:block; }
 
 </style>
 </head>
@@ -570,12 +572,13 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v61.3</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v61.6</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
 <div id="bossBar"><div id="bossBarName"></div><div id="bossBarBg"><div id="bossBarFill"></div></div></div>
 <div id="rogueHud" aria-live="polite"></div>
+<div id="rogueRecoveryStatus" aria-live="polite"></div>
 <div id="playerHpWrap">
   <div id="playerHpBarBg"><div id="playerHpBarFill"></div></div>
 </div>
@@ -772,7 +775,147 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
-<script src="rogue-progression.js?v=61.3-party-instances"></script>
+<script>
+/* v61.5: progression module is bundled inline to avoid startup failure if a relative JS request 404s. Keep public/rogue-progression.js for Node-side tests. */
+// ローグライク進行データ v61
+// 生還時は携行装備を保持し、死亡・中断再読込では携行装備だけを失う。
+// 保管庫と精算済み欠片は localStorage に残る。
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.RogueProgression = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+  const KEY = 'lowpoly-island-rogue-progress-v61';
+  const LEGACY_KEY = 'lowpoly-island-rogue-meta-v60';
+  const WEAPON_MAX = 3;
+  const ARMOR_MAX = 2;
+  const SHARDS_MAX = 999999;
+
+  function integer(value, max) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.min(max, Math.floor(n))) : 0;
+  }
+  function emptyState() {
+    return {
+      version: 1,
+      shards: 0,
+      equipped: { weaponBonus: 0, armorBonus: 0 },
+      stash: { weaponBonus: 0, armorBonus: 0 },
+      runInProgress: false
+    };
+  }
+  function normalize(raw) {
+    const state = emptyState();
+    if (!raw || typeof raw !== 'object') return state;
+    state.shards = integer(raw.shards, SHARDS_MAX);
+    const equipped = raw.equipped && typeof raw.equipped === 'object' ? raw.equipped : {};
+    const stash = raw.stash && typeof raw.stash === 'object' ? raw.stash : {};
+    state.equipped.weaponBonus = integer(equipped.weaponBonus, WEAPON_MAX);
+    state.equipped.armorBonus = integer(equipped.armorBonus, ARMOR_MAX);
+    state.stash.weaponBonus = integer(stash.weaponBonus, WEAPON_MAX);
+    state.stash.armorBonus = integer(stash.armorBonus, ARMOR_MAX);
+    state.runInProgress = raw.runInProgress === true;
+    return state;
+  }
+  function read(storage, key) {
+    try {
+      const text = storage && storage.getItem(key);
+      return text ? JSON.parse(text) : null;
+    } catch (_) { return null; }
+  }
+  function save(storage, state) {
+    const clean = normalize(state);
+    try { if (storage) storage.setItem(KEY, JSON.stringify(clean)); } catch (_) { /* private mode or quota */ }
+    Object.assign(state, clean);
+    return state;
+  }
+  function legacyWeaponTier(level) {
+    const n = integer(level, 12);
+    return n <= 0 ? 0 : n >= 9 ? 3 : n >= 5 ? 2 : 1;
+  }
+  function legacyArmorTier(level) {
+    const n = integer(level, 12);
+    return n <= 0 ? 0 : n >= 7 ? 2 : 1;
+  }
+  function load(storage) {
+    const current = read(storage, KEY);
+    let state;
+    if (current && typeof current === 'object') {
+      state = normalize(current);
+    } else {
+      const legacy = read(storage, LEGACY_KEY) || {};
+      state = emptyState();
+      state.shards = integer(legacy.shards, SHARDS_MAX);
+      // 旧版の恒久ステータス購入は、同等の上限帯に丸めた保管庫装備へ移行する。
+      // これにより旧セーブの投資を失わせず、以降の能力上昇は装備の着脱として扱う。
+      state.stash.weaponBonus = legacyWeaponTier(legacy.attack);
+      state.stash.armorBonus = legacyArmorTier(legacy.armor);
+    }
+    // ダンジョン内でブラウザを再読み込みした場合は死亡と同じ扱い。
+    // 保管庫と精算済み通貨を保護しつつ、携行装備や未精算戦利品の巻き戻しを防ぐ。
+    if (state.runInProgress) {
+      state.equipped.weaponBonus = 0;
+      state.equipped.armorBonus = 0;
+      state.runInProgress = false;
+    }
+    save(storage, state);
+    return state;
+  }
+  function beginRun(state, storage) {
+    state.runInProgress = true;
+    return save(storage, state);
+  }
+  function survive(state, run, storage) {
+    run = run || {};
+    state.shards = integer(state.shards + integer(run.shards, SHARDS_MAX), SHARDS_MAX);
+    state.equipped.weaponBonus = integer(run.weaponBonus, WEAPON_MAX);
+    state.equipped.armorBonus = integer(run.armorBonus, ARMOR_MAX);
+    state.runInProgress = false;
+    return save(storage, state);
+  }
+  function die(state, storage) {
+    state.equipped.weaponBonus = 0;
+    state.equipped.armorBonus = 0;
+    state.runInProgress = false;
+    return save(storage, state);
+  }
+  function buyStoredGear(state, slot, cost, storage) {
+    if (slot !== 'weapon' && slot !== 'armor') return false;
+    const field = slot === 'weapon' ? 'weaponBonus' : 'armorBonus';
+    const max = slot === 'weapon' ? WEAPON_MAX : ARMOR_MAX;
+    const price = integer(cost, SHARDS_MAX);
+    if (state.stash[field] > 0 || state.shards < price || price <= 0 || max < 1) return false;
+    state.shards -= price;
+    state.stash[field] = 1;
+    save(storage, state);
+    return true;
+  }
+  function deposit(state, run, slot, storage) {
+    if (!run || (slot !== 'weapon' && slot !== 'armor')) return false;
+    const field = slot === 'weapon' ? 'weaponBonus' : 'armorBonus';
+    const max = slot === 'weapon' ? WEAPON_MAX : ARMOR_MAX;
+    const carried = integer(run[field], max);
+    if (carried <= 0) return false;
+    // 保管庫が埋まっていれば預ける動作で装備を交換する。より良い装備を取り出せなくなるのを防ぐ。
+    const stored = integer(state.stash[field], max);
+    state.stash[field] = carried;
+    run[field] = stored;
+    save(storage, state);
+    return true;
+  }
+  function withdraw(state, run, slot, storage) {
+    if (!run || (slot !== 'weapon' && slot !== 'armor')) return false;
+    const field = slot === 'weapon' ? 'weaponBonus' : 'armorBonus';
+    if (state.stash[field] <= 0 || integer(run[field], slot === 'weapon' ? WEAPON_MAX : ARMOR_MAX) > 0) return false;
+    run[field] = state.stash[field];
+    state.stash[field] = 0;
+    save(storage, state);
+    return true;
+  }
+  return { KEY, LEGACY_KEY, WEAPON_MAX, ARMOR_MAX, emptyState, normalize, load, save, beginRun, survive, die, buyStoredGear, deposit, withdraw };
+});
+</script>
 <div id="errBox" style="display:none; position:fixed; inset:auto 12px 12px 12px; z-index:999; background:rgba(120,20,20,.92); color:#fff; font:12px/1.5 monospace; padding:10px 14px; border-radius:8px; max-height:40vh; overflow:auto; white-space:pre-wrap;"></div>
 <script>
 (function(){
@@ -1925,10 +2068,14 @@ window.startGame = function(NETINIT){
   const roguePartySolo = document.getElementById('roguePartySolo');
   const roguePartyCancel = document.getElementById('roguePartyCancel');
   let activeRoguePartyCode = '';
+  let rogueRecoveryStatusBag = null;
+  let rogueRecoveryStatusReceivedAt = 0;
+  const rogueRecoveryStatusEl = document.getElementById('rogueRecoveryStatus');
   let camSnap = false; // 洞窟の出入りではカメラを補間せず一気に移す
 
   const ROGUE_STASH_WEAPON_COST = 8;
   const ROGUE_STASH_ARMOR_COST = 8;
+  const ROGUE_RECOVERY_TTL_MS = 7 * 60 * 1000;
   function updateRogueMetaPanel(){
     if(!rogueMetaBalance) return;
     const runWeapon=rogueRun?rogueRun.weaponBonus:0, runArmor=rogueRun?rogueRun.armorBonus:0;
@@ -1989,20 +2136,20 @@ window.startGame = function(NETINIT){
   rogueStoreWeapon.addEventListener('click',()=>{
     const swapping=rogueProgress.stash.weaponBonus>0;
     if(!RogueProgression.deposit(rogueProgress,rogueRun,'weapon',localStorage)) return;
-    saveRogueMeta(); updateRogueHud(); updateRogueMetaPanel(); showToast(swapping?'携行武器と保管庫の武器を入れ替えた':'武器を保管庫へ預けた','安全な保管');
+    saveRogueMeta(); updateRogueHud(); updateRogueMetaPanel(); sendRogueCarryState(true); showToast(swapping?'携行武器と保管庫の武器を入れ替えた':'武器を保管庫へ預けた','安全な保管');
   });
   rogueTakeWeapon.addEventListener('click',()=>{
     if(!RogueProgression.withdraw(rogueProgress,rogueRun,'weapon',localStorage)) return;
-    updateRogueHud(); updateRogueMetaPanel(); showToast('保管庫から武器を装備した','装備変更');
+    updateRogueHud(); updateRogueMetaPanel(); sendRogueCarryState(true); showToast('保管庫から武器を装備した','装備変更');
   });
   rogueStoreArmor.addEventListener('click',()=>{
     const swapping=rogueProgress.stash.armorBonus>0;
     if(!RogueProgression.deposit(rogueProgress,rogueRun,'armor',localStorage)) return;
-    saveRogueMeta(); updateRogueHud(); updateRogueMetaPanel(); showToast(swapping?'携行防具と保管庫の防具を入れ替えた':'防具を保管庫へ預けた','安全な保管');
+    saveRogueMeta(); updateRogueHud(); updateRogueMetaPanel(); sendRogueCarryState(true); showToast(swapping?'携行防具と保管庫の防具を入れ替えた':'防具を保管庫へ預けた','安全な保管');
   });
   rogueTakeArmor.addEventListener('click',()=>{
     if(!RogueProgression.withdraw(rogueProgress,rogueRun,'armor',localStorage)) return;
-    updateRogueHud(); updateRogueMetaPanel(); showToast('保管庫から防具を装備した','装備変更');
+    updateRogueHud(); updateRogueMetaPanel(); sendRogueCarryState(true); showToast('保管庫から防具を装備した','装備変更');
   });
   rogueMetaClose.addEventListener('click',closeRogueMetaPanel);
   rogueMetaPanel.addEventListener('click',e=>{ if(e.target===rogueMetaPanel) closeRogueMetaPanel(); });
@@ -2016,7 +2163,10 @@ window.startGame = function(NETINIT){
     const goal=rogueRun.stage<3?`この区画の敵を撃破：残り ${remaining}`:rogueRun.stage===3?'守護者を倒して脱出門を開く':'脱出門から生還する';
     const bossText=rogueRun.boss&&rogueRun.stage>=3&&rogueRun.boss.hp>0?` / 守護者HP ${rogueRun.boss.hp}/${rogueRun.boss.maxHp}`:'';
     const partyText=activeRoguePartyCode?`　｜　パーティーコード <strong>${activeRoguePartyCode}</strong>`:'';
-    const html=`<strong>深層遺跡</strong>　RUN ${rogueRun.runNo}　${stageText}${partyText}<br><span class="sub">${goal}${bossText}　｜　未精算の欠片 ${rogueRun.shards}　｜　携行武器 +${rogueRun.weaponBonus}　携行防具 +${rogueRun.armorBonus}</span>`;
+    const ownBag=(rogueRun.recoveryBags||[]).find(b=>b.mine);
+    const bagMs=ownBag?rogueRecoveryRemainingMs(ownBag):0;
+    const bagText=ownBag?`　｜　遺品回収 ${formatRogueRecoveryTime(bagMs)}`:'';
+    const html=`<strong>深層遺跡</strong>　RUN ${rogueRun.runNo}　${stageText}${partyText}<br><span class="sub">${goal}${bossText}　｜　未精算の欠片 ${rogueRun.shards}　｜　携行武器 +${rogueRun.weaponBonus}　携行防具 +${rogueRun.armorBonus}${bagText}</span>`;
     if(html!==rogueHudLast){rogueHud.innerHTML=html;rogueHudLast=html;}
     rogueHud.classList.add('show');
   }
@@ -2045,6 +2195,67 @@ window.startGame = function(NETINIT){
     latch:new THREE.MeshStandardMaterial({color:0xc9aa6b,metalness:.35,roughness:.5,flatShading:true})
   };
   const ROGUE_CHEST_GEOS={base:new THREE.BoxGeometry(1.45,.72,1.05),band:new THREE.BoxGeometry(.12,.77,1.12),lid:new THREE.BoxGeometry(1.45,.28,1.05),latch:new THREE.BoxGeometry(.22,.32,.1)};
+  const ROGUE_RECOVERY_MATS={
+    sack:new THREE.MeshStandardMaterial({color:0x8a6038,roughness:1,flatShading:true}),
+    strap:new THREE.MeshStandardMaterial({color:0x3d2c21,roughness:1,flatShading:true}),
+    metal:new THREE.MeshStandardMaterial({color:0xbacbd0,metalness:.55,roughness:.42,flatShading:true}),
+    crystal:new THREE.MeshStandardMaterial({color:0x72e5e6,emissive:0x24777b,emissiveIntensity:.7,roughness:.35,flatShading:true}),
+    ring:new THREE.MeshBasicMaterial({color:0x7ddfe0,transparent:true,opacity:.42,depthWrite:false})
+  };
+  const ROGUE_RECOVERY_GEOS={sack:new THREE.DodecahedronGeometry(.39,0),strap:new THREE.BoxGeometry(.58,.075,.075),blade:new THREE.BoxGeometry(.10,.72,.08),hilt:new THREE.BoxGeometry(.34,.09,.11),plate:new THREE.OctahedronGeometry(.25,0),crystal:new THREE.OctahedronGeometry(.16,0),ring:new THREE.TorusGeometry(.72,.025,4,24)};
+  function makeRogueRecoveryMesh(data){
+    const g=new THREE.Group();
+    const sack=new THREE.Mesh(ROGUE_RECOVERY_GEOS.sack,ROGUE_RECOVERY_MATS.sack);sack.position.set(0,.4,0);sack.scale.set(1,1.12,.85);sack.castShadow=true;g.add(sack);
+    const strap=new THREE.Mesh(ROGUE_RECOVERY_GEOS.strap,ROGUE_RECOVERY_MATS.strap);strap.position.set(0,.48,-.28);strap.rotation.z=-.22;g.add(strap);
+    const blade=new THREE.Mesh(ROGUE_RECOVERY_GEOS.blade,ROGUE_RECOVERY_MATS.metal);blade.position.set(.39,.34,-.08);blade.rotation.z=.38;blade.castShadow=true;g.add(blade);
+    const hilt=new THREE.Mesh(ROGUE_RECOVERY_GEOS.hilt,ROGUE_RECOVERY_MATS.strap);hilt.position.set(.43,.08,-.08);hilt.rotation.z=.38;g.add(hilt);
+    const plate=new THREE.Mesh(ROGUE_RECOVERY_GEOS.plate,ROGUE_RECOVERY_MATS.metal);plate.position.set(-.35,.31,.05);plate.scale.set(1,.7,.45);g.add(plate);
+    const crystal=new THREE.Mesh(ROGUE_RECOVERY_GEOS.crystal,ROGUE_RECOVERY_MATS.crystal);crystal.position.set(0,.88,.04);g.add(crystal);
+    const ring=new THREE.Mesh(ROGUE_RECOVERY_GEOS.ring,ROGUE_RECOVERY_MATS.ring);ring.rotation.x=-Math.PI/2;ring.position.y=.035;g.add(ring);
+    g.position.set(data.x,rogueFloorHeight(data.x,data.z),data.z);g.userData.rogueRecoveryBagId=data.bagId;
+    const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene;sceneRef.add(g);
+    return g;
+  }
+  function rogueRecoveryRemainingMs(bag){return Math.max(0,(Number(bag.remainingMs)||0)-(bag.running?Math.max(0,performance.now()-(bag.receivedAt||performance.now())):0));}
+  function formatRogueRecoveryTime(ms){const sec=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;}
+  function updateRogueRecoveryStatus(){
+    if(!rogueRecoveryStatusEl)return;
+    if(!rogueRecoveryStatusBag){rogueRecoveryStatusEl.classList.remove('show');rogueRecoveryStatusEl.textContent='';return;}
+    const left=rogueRecoveryRemainingMs(rogueRecoveryStatusBag);
+    if(left<=0){rogueRecoveryStatusBag=null;rogueRecoveryStatusEl.classList.remove('show');rogueRecoveryStatusEl.textContent='';return;}
+    const prefix=inCaveIndex===ROGUE_DUNGEON_INDEX?'遺品袋':'遺品を回収するにはダンジョンへ戻る';
+    rogueRecoveryStatusEl.textContent=`${prefix}　回収期限 ${formatRogueRecoveryTime(left)}${rogueRecoveryStatusBag.running?'':'（時間停止中）'}`;
+    rogueRecoveryStatusEl.classList.add('show');
+  }
+  function applyRogueRecoveryState(m){
+    if(!m||!Array.isArray(m.bags))return;
+    const mine=m.bags.find(b=>b&&b.mine===true);
+    if(mine){rogueRecoveryStatusBag={remainingMs:Math.max(0,Math.min(ROGUE_RECOVERY_TTL_MS,Number(mine.remainingMs)||0)),running:mine.running===true,receivedAt:performance.now()};rogueRecoveryStatusReceivedAt=performance.now();}
+    else {rogueRecoveryStatusBag=null;rogueRecoveryStatusReceivedAt=performance.now();}
+    updateRogueRecoveryStatus();
+    if(!rogueRun||m.instanceId!==rogueRun.instanceId)return;
+    const sceneRef=caves[ROGUE_DUNGEON_INDEX].interiorScene;
+    const old=new Map((rogueRun.recoveryBags||[]).map(b=>[b.bagId,b]));
+    const next=[];
+    for(const raw of m.bags){
+      if(!raw||typeof raw.bagId!=='string'||![raw.x,raw.z,raw.remainingMs].every(Number.isFinite))continue;
+      let bag=old.get(raw.bagId);
+      if(!bag){bag={bagId:raw.bagId,mesh:makeRogueRecoveryMesh(raw)};}
+      bag.x=raw.x;bag.z=raw.z;bag.remainingMs=Math.max(0,Math.min(ROGUE_RECOVERY_TTL_MS,raw.remainingMs));
+      bag.ownerName=typeof raw.ownerName==='string'?raw.ownerName.slice(0,24):'旅人';bag.mine=raw.mine===true;bag.running=raw.running===true;bag.receivedAt=performance.now();
+      bag.mesh.position.set(bag.x,rogueFloorHeight(bag.x,bag.z),bag.z);bag.mesh.visible=true;
+      next.push(bag);old.delete(raw.bagId);
+    }
+    for(const bag of old.values())if(bag.mesh&&bag.mesh.parent)bag.mesh.parent.remove(bag.mesh);
+    rogueRun.recoveryBags=next;updateRogueHud();
+  }
+  function sendRogueCarryState(force=false){
+    if(!rogueRun||!rogueRun.active||inCaveIndex!==ROGUE_DUNGEON_INDEX||playerDead)return;
+    const now=performance.now();
+    if(!force&&now-(rogueRun.lastCarrySyncAt||0)<1000)return;
+    rogueRun.lastCarrySyncAt=now;
+    Net.send({t:'rogueCarryState',weaponBonus:rogueRun.weaponBonus,armorBonus:rogueRun.armorBonus,shards:rogueRun.shards,attackBuffMs:Math.round(Math.max(0,attackBuffTimer)*1000),speedBuffMs:Math.round(Math.max(0,speedBuffTimer)*1000)});
+  }
   function makeRogueEnemy(kind,x,z,hp,stage,boss,optional=false,rogueId=''){
     const g=new THREE.Group();
     const mat=boss?ROGUE_ENEMY_MATS.boss:(ROGUE_ENEMY_MATS[kind]||ROGUE_ENEMY_MATS.shade);
@@ -2085,6 +2296,7 @@ window.startGame = function(NETINIT){
     if(rogueRun){
       for(const e of rogueRun.enemies){ if(e.mesh&&e.mesh.parent)e.mesh.parent.remove(e.mesh); }
       for(const c of rogueRun.chests){ if(c.mesh&&c.mesh.parent)c.mesh.parent.remove(c.mesh); }
+      for(const b of (rogueRun.recoveryBags||[])){if(b.mesh&&b.mesh.parent)b.mesh.parent.remove(b.mesh);}
     }
     for(const gate of (sceneRef.userData.rogueGates||[])) gate.seal.visible=true;
     if(sceneRef.userData.rogueExtractionPortal) sceneRef.userData.rogueExtractionPortal.visible=false;
@@ -2096,7 +2308,7 @@ window.startGame = function(NETINIT){
     const layout=Shared.getRogueDungeonLayout(Number.isInteger(seed)?seed:(Math.floor(Math.random()*4294967296)>>>0));
     // 同じ探索ランの全参加者が同じseed/配置を使う。装備・欠片は各プレイヤー別。
     RogueProgression.beginRun(rogueProgress,localStorage);
-    rogueRun={active:true,runNo:rogueRunCount,seed:layout.seed,instanceId:0,stage:0,openGates:0,shards:0,weaponBonus:rogueProgress.equipped.weaponBonus,armorBonus:rogueProgress.equipped.armorBonus,enemies:[],chests:[],boss:null,lastPos:{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z},extractReady:false};
+    rogueRun={active:true,runNo:rogueRunCount,seed:layout.seed,instanceId:0,stage:0,openGates:0,shards:0,weaponBonus:rogueProgress.equipped.weaponBonus,armorBonus:rogueProgress.equipped.armorBonus,enemies:[],chests:[],recoveryBags:[],boss:null,lastPos:{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z},extractReady:false,lastCarrySyncAt:0};
     for(const en of layout.enemies){
       rogueRun.enemies.push(makeRogueEnemy(en.kind,en.x,en.z,en.hp,en.stage,false,en.optional,en.id));
     }
@@ -2138,7 +2350,8 @@ window.startGame = function(NETINIT){
       for(const idx of m.openedChests){const chest=rogueRun.chests[idx];if(chest&&!chest.opened){chest.opened=true;chest.lidPivot.rotation.x=-1.05;}}
     }
     if(Array.isArray(m.enemyPositions)) applyRogueEnemyMotion({instanceId:m.instanceId,enemies:m.enemyPositions},true);
-    updateRogueHud();
+    if(Array.isArray(m.recoveryBags))applyRogueRecoveryState({instanceId:m.instanceId,bags:m.recoveryBags});
+    updateRogueHud();sendRogueCarryState(true);
   }
 
   function applyRogueEnemyMotion(m, snap=false){
@@ -2176,7 +2389,7 @@ window.startGame = function(NETINIT){
       else rogueRun.shards+=2;
     }
     rogueRun.shards+=Math.max(0,Math.min(10,Number(reward.shards)||0));
-    updateRogueHud();
+    updateRogueHud();sendRogueCarryState(true);
   }
 
   function applyRogueEnemyHitState(m){
@@ -2193,7 +2406,26 @@ window.startGame = function(NETINIT){
     if(target.boss)target.mesh.visible=rogueRun.stage>=3;
     const portal=caves[ROGUE_DUNGEON_INDEX].interiorScene.userData.rogueExtractionPortal;if(portal)portal.visible=rogueRun.extractReady;
     spawnHitParticles(new THREE.Vector3(target.mesh.position.x,target.mesh.position.y+1,target.mesh.position.z),0x91e7ef);
-    updateRogueHud();
+    updateRogueHud();sendRogueCarryState(true);
+  }
+  function applyRogueRecoveryClaimResult(m){
+    if(!m||!m.ok||!rogueRun||m.instanceId!==rogueRun.instanceId||!m.payload){
+      if(m&&!m.ok){const reason=m.reason==='too-far'?'遺品袋に近づいてください':m.reason==='expired'?'遺品袋の回収期限が過ぎました':m.reason==='not-found'?'回収できる遺品袋がありません':'遺品を回収できませんでした';showToast(reason,'遺品回収');}
+      return;
+    }
+    const payload=m.payload;
+    const weapon=Math.max(0,Math.min(3,Number(payload.weaponBonus)||0));
+    const armor=Math.max(0,Math.min(2,Number(payload.armorBonus)||0));
+    if(weapon>rogueRun.weaponBonus){rogueRun.weaponBonus=weapon;showToast(`武器 +${weapon} を取り戻した`,'遺品回収');}
+    else if(weapon>0)rogueRun.shards+=2;
+    if(armor>rogueRun.armorBonus){rogueRun.armorBonus=armor;showToast(`防具 +${armor} を取り戻した`,'遺品回収');}
+    else if(armor>0)rogueRun.shards+=2;
+    rogueRun.shards=Math.max(0,Math.min(999999,rogueRun.shards+Math.max(0,Math.min(999999,Number(payload.shards)||0))));
+    const ratio=Math.max(0,Math.min(1,Number(m.restoredBuffRatio)||0.5));
+    attackBuffTimer=Math.max(attackBuffTimer,Math.max(0,Math.min(120,Number(payload.attackBuffMs)||0)/1000*ratio));
+    speedBuffTimer=Math.max(speedBuffTimer,Math.max(0,Math.min(120,Number(payload.speedBuffMs)||0)/1000*ratio));
+    sendRogueCarryState(true);updateRogueHud();updateRogueMetaPanel();
+    showToast(`遺品を回収した。欠片・装備を取り戻し、一時強化は一部復元された。`,'回収成功');
   }
   function openRogueChest(chest){
     if(!rogueRun||!chest||chest.opened)return;
@@ -2207,8 +2439,10 @@ window.startGame = function(NETINIT){
     for(let i=0;i<gates.length;i++) gates[i].seal.visible=i>=rogueRun.openGates;
   }
   function updateRogueDungeon(dt){
+    updateRogueRecoveryStatus();
     if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun||!rogueRun.active||playerDead)return;
     // v61.2+: 敵の移動・標的選択・攻撃判定はサーバー管理。クライアントは同期位置を補間して描画する。
+    sendRogueCarryState(false);
     const targets=[...rogueRun.enemies,rogueRun.boss].filter(Boolean);
     for(const e of targets){
       if(e.hp>0&&e.flash>0){e.flash=Math.max(0,e.flash-dt);if(e.flash<=0)e.mesh.scale.setScalar(1);}
@@ -5753,13 +5987,20 @@ window.startGame = function(NETINIT){
     closeStructureActionMenu(false);
     const diedInRogueDungeon=inCaveIndex===ROGUE_DUNGEON_INDEX;
     const lostOutdoorCarry=!diedInRogueDungeon&&(rogueProgress.equipped.weaponBonus>0||rogueProgress.equipped.armorBonus>0);
-    // ロストは死亡した瞬間に保存する。死亡画面でリロードして携行装備を取り戻す抜け道を防ぐ。
+    const recoveryPayload=diedInRogueDungeon&&rogueRun?{weaponBonus:rogueRun.weaponBonus,armorBonus:rogueRun.armorBonus,shards:rogueRun.shards,attackBuffMs:Math.round(Math.max(0,attackBuffTimer)*1000),speedBuffMs:Math.round(Math.max(0,speedBuffTimer)*1000)}:null;
+    const hadRecoverableRogueLoot=!!(recoveryPayload&&(recoveryPayload.weaponBonus||recoveryPayload.armorBonus||recoveryPayload.shards||recoveryPayload.attackBuffMs||recoveryPayload.speedBuffMs));
+    // 死亡地点のサーバー確定位置に、携行装備・未精算欠片・一時強化を含む遺品袋を残す。
+    // state→dropの順で送信して、サーバーが死亡位置とパーティーを検証できるようにする。
+    if(diedInRogueDungeon&&hadRecoverableRogueLoot){
+      sendState();Net.send({t:'rogueRecoveryDrop',...recoveryPayload});
+    }
+    // ロスト処理は死亡時に即時保存。遺品袋があれば回収時に戻せるが、ローカルセーブからの巻き戻しはできない。
     if(diedInRogueDungeon||lostOutdoorCarry){
       RogueProgression.die(rogueProgress,localStorage); saveRogueMeta();
       attackBuffTimer=0; speedBuffTimer=0;
     }
     document.querySelector('#deathOverlay h1').textContent = diedInRogueDungeon ? '冒険失敗' : '倒れた…';
-    document.getElementById('deathSummary').textContent = diedInRogueDungeon ? '未精算の欠片と携行装備を失う。保管庫の装備は残る。島で目を覚ます。' : lostOutdoorCarry ? '携行している遺跡装備を失った。保管庫の装備は残る。島で目を覚ます。' : 'もう一度、島で目を覚ます。';
+    document.getElementById('deathSummary').textContent = diedInRogueDungeon ? (hadRecoverableRogueLoot?'装備・未精算の欠片を死亡地点に遺した。目を覚まし、遺品袋を7分以内（ゲーム内稼働時間）に回収すれば装備と欠片を取り戻せる。一時強化は一部復元。':'遺品は残らなかった。保管庫の装備と精算済み欠片は残る。島で目を覚ます。') : lostOutdoorCarry ? '携行している遺跡装備を失った。保管庫の装備は残る。島で目を覚ます。' : 'もう一度、島で目を覚ます。';
     document.getElementById('deathOverlay').classList.add('show');
     if (document.pointerLockElement) document.exitPointerLock();
   }
@@ -7570,6 +7811,11 @@ window.startGame = function(NETINIT){
         const d=Math.hypot(chest.x-player.position.x,chest.z-player.position.z);
         if(d<nearestD){nearestD=d;nearest={kind:'rogueChest',ref:chest};}
       }
+      for(const bag of (rogueRun.recoveryBags||[])){
+        if(!bag.mine)continue;
+        const d=Math.hypot(bag.x-player.position.x,bag.z-player.position.z);
+        if(d<nearestD){nearestD=d;nearest={kind:'rogueRecoveryBag',ref:bag};}
+      }
       const ex=caves[inCaveIndex].exitLocal;
       const exitD=Math.hypot(ex.x-player.position.x,ex.z-player.position.z);
       if(exitD<nearestD){nearestD=exitD;nearest={kind:'rogueReturn'};}
@@ -7614,6 +7860,8 @@ window.startGame = function(NETINIT){
         promptText = nearest.caveIndex===ROGUE_DUNGEON_INDEX ? (isTouch ? 'GET' : 'E') + 'で遺跡ダンジョンへ' : (isTouch ? 'GET' : 'E') + 'で洞窟に入る';
       } else if(nearest.kind==='rogueChest'){
         promptText=(isTouch?'GET':'E')+'で宝箱を開ける';
+      } else if(nearest.kind==='rogueRecoveryBag'){
+        promptText=(isTouch?'GET':'E')+`で遺品を回収（残り ${formatRogueRecoveryTime(rogueRecoveryRemainingMs(nearest.ref))}）`;
       } else if(nearest.kind==='rogueUpgrade'){
         promptText=(isTouch?'GET':'E')+'で装備保管庫を開く';
       } else if(nearest.kind==='rogueReturn'){
@@ -7658,6 +7906,8 @@ window.startGame = function(NETINIT){
         exitCave();
       } else if(n.kind==='rogueChest'){
         openRogueChest(n.ref);
+      } else if(n.kind==='rogueRecoveryBag'){
+        if(n.ref&&n.ref.mine)Net.send({t:'rogueRecoveryClaim',bagId:n.ref.bagId});
       } else if(n.kind==='rogueUpgrade'){
         openRogueMetaPanel();
       } else if(n.kind==='rogueReturn'||n.kind==='rogueExtraction'){
@@ -8530,6 +8780,14 @@ window.startGame = function(NETINIT){
         }
         case 'rogueRoomJoined': applyRogueRoomSnapshot(m,true); break;
         case 'rogueRoomState': applyRogueRoomSnapshot(m,false); break;
+        case 'rogueRecoveryBagState': applyRogueRecoveryState(m); break;
+        case 'rogueRecoveryDropResult': {
+          if(m.ok)showToast('死亡地点に遺品袋を残した。制限時間内に回収しよう。','遺品');
+          else if(m.reason!=='no-items')showToast('遺品袋を作成できなかった。仲間に残る既存の袋がないか確認してください。','遺品');
+          break;
+        }
+        case 'rogueRecoveryClaimResult': applyRogueRecoveryClaimResult(m); break;
+        case 'rogueRecoveryExpired': rogueRecoveryStatusBag=null; updateRogueRecoveryStatus(); showToast('遺品袋の回収期限が過ぎた。中身は失われた。','遺品'); break;
         case 'rogueChestOpened': applyRogueChestOpened(m); break;
         case 'rogueEnemyHitState': applyRogueEnemyHitState(m); break;
         case 'rogueEnemyMotion': applyRogueEnemyMotion(m,false); break;
@@ -9243,7 +9501,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=61.3-party-instances"></script>
+<script src="shared.js?v=61.6-enemy-patrol"></script>
 <script src="boot.js"></script>
 </body>
 </html>

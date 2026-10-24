@@ -27,6 +27,6 @@ check('タップ動作を妨げないCSSを指定', /touch-action\s*:\s*manipula
 check('チャットボタンは非submitボタンでアクセシブルな名前を持つ', /<button id="chatBtn" type="button" aria-label="チャットを開く"/.test(html));
 check('チャットボタンはOS依存絵文字ではなくSVGアイコン', /<button id="chatBtn"[^>]*><svg viewBox="0 0 24 24"/.test(html) && !/id="chatBtn"[^>]*>💬/.test(html));
 check('既存のチャット起動処理に接続されている', /getElementById\('chatBtn'\)\.addEventListener\('click', openChat\)/.test(html));
-check('バージョン表示とキャッシュキー更新', /id="versionLabel"[^>]*>v61\.3<\/div>/.test(html) && html.includes('shared.js?v=61.3-party-instances'));
+check('バージョン表示とキャッシュキー更新', /id="versionLabel"[^>]*>v61\.6<\/div>/.test(html) && html.includes('shared.js?v=61.6-enemy-patrol'));
 if (failures) process.exit(1);
 console.log('Mobile chat tap regression tests passed.');
