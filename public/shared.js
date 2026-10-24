@@ -40,7 +40,7 @@
   const MAX_BULK_PICKUP_IDS = 100; // まとめて回収する要求がWebSocketの上限を超えないようにする
   // クライアントの world builder は宝箱を最大3個配置する。番号の範囲も一致させる。
   const LAND_CHEST_COUNT = 3; // 既存の陸上宝箱は位置・番号を維持する
-  const MAX_CHESTS = 7; // 陸3個 → 沈没船1個 → 灯台の頂上1個 → 野営地1個 → 海底洞窟の奥1個(番号は追加順で、既存の番号は変えない)
+  const MAX_CHESTS = 9; // 既存7個(陸3・沈没船・灯台・野営地1・海底洞窟)を維持し、追加野営地2個を末尾へ追加
   const MAX_UNDERWATER_RESOURCES = 100; // 基本の採集ポイント48 + 追加の海藻・サンゴ・大岩32 に余裕を持たせた上限(キー検証は u0〜u99)
   const UNDERWATER_INTERACT_RADIUS = 3.8;
   const WORLD_LAYOUT_VERSION = 3; // 遺跡・宝箱の配置生成方式と遺跡選択方式
@@ -69,6 +69,9 @@
   const ENEMY_WOLF_COUNT = 10, ENEMY_BOAR_COUNT = 8; // 島の敵の数(狼が先、猪が後。id は 0 から連番)
   const ENEMY_LIZARD_COUNT = 6, ENEMY_CRAB_COUNT = 8, ENEMY_JELLY_COUNT = 8; // その後ろに 岩トカゲ・カニ・クラゲ の順
   const ENEMY_CLASSIC_WOLF_COUNT = 5, ENEMY_CLASSIC_BOAR_COUNT = 4; // さらに後ろに、初期版の見た目の狼・猪(強さと動きは狼・猪と同じ)
+  // 野営地は3か所、各4体。既存の通常敵と最初の野営地4体のIDは維持する。
+  const CAMP_SITE_COUNT = 3;
+  const CAMP_GUARDS_PER_SITE = 4;
   // 敵の種類ごとの設定。aggroR>0 の敵は近くのプレイヤーを襲う(hurt=1回の被ダメージ、reach=噛みつく距離、cd=攻撃間隔[秒])
   //  fleeBelow: HPがこの割合以下で殴られると逃げる / dormant: 近づくまで動かない(岩に擬態) / water: 水中の敵(水の上にいるプレイヤーだけを狙う)
   //  guard: 正面からの攻撃のダメージをこの値だけ減らす(カニ) / orbit: 追うとき相手の周りを回る(狼) / hold: この距離まで近づいたら止まる(クラゲ。触手の範囲より少し内側まで寄って来る) / turn: 向きを変える速さ
@@ -93,6 +96,7 @@
   // 技の番号(スナップショットで送る。 状態コード = (段階+1)*10 + 技番号。段階: 0=予備動作 1=本攻撃 2=のけぞり。 0 は技なし)
   const MOVE_ID = { lunge: 1, bite: 2, whip: 3, pulse: 4, charge: 5, pinch: 6 };
   // 初期版の見た目の狼・猪は、強さと動きを狼・猪と同じにして、見た目だけ別の種類にする
+  ENEMY_KINDS.campGuard = ENEMY_KINDS.raider; // 新デザインの番人。戦闘バランスは既存の人型番人と共通。
   ENEMY_KINDS.wolfClassic = ENEMY_KINDS.wolf;
   ENEMY_KINDS.boarClassic = ENEMY_KINDS.boar;
   // 敵のリスト(id順)。この並びが id になる。
@@ -101,7 +105,7 @@
     Array(ENEMY_LIZARD_COUNT).fill('lizard'), Array(ENEMY_CRAB_COUNT).fill('crab'), Array(ENEMY_JELLY_COUNT).fill('jelly'),
     Array(ENEMY_CLASSIC_WOLF_COUNT).fill('wolfClassic'), Array(ENEMY_CLASSIC_BOAR_COUNT).fill('boarClassic'));
   // 野営地の見張り(さらに後ろに追加。既存の敵の id は変えない)。野営地のまわりだけを持ち場にする
-  const ENEMY_CAMP_KINDS = ['raider', 'raider', 'raider', 'raider'];
+  const ENEMY_CAMP_KINDS = Array(CAMP_SITE_COUNT * CAMP_GUARDS_PER_SITE).fill('campGuard');
   const ENEMY_CAMP_START = ENEMY_ORDER.length;
   for (const k of ENEMY_CAMP_KINDS) ENEMY_ORDER.push(k);
   const ENEMY_GROTTO_START = ENEMY_ORDER.length;
@@ -109,6 +113,7 @@
   const ENEMY_GROTTO_KINDS = ['jelly', 'jelly', 'jelly'];
   for (const k of ENEMY_GROTTO_KINDS) ENEMY_ORDER.push(k);
   const isCampEnemyId = id => Number.isInteger(id) && id >= ENEMY_CAMP_START && id < ENEMY_GROTTO_START;
+  const getCampIndexForEnemyId = id => isCampEnemyId(id) ? Math.floor((id - ENEMY_CAMP_START) / CAMP_GUARDS_PER_SITE) : -1;
   const isGrottoEnemyId = id => Number.isInteger(id) && id >= ENEMY_GROTTO_START && id < ENEMY_ORDER.length;
   const JELLY_WATER_MIN = -9.5, JELLY_WATER_MAX = -1.0; // クラゲが泳ぐ海底の高さ(地面の高さがこの範囲の場所)
   const WADE_MIN = -0.6;              // 陸の敵が入れる水の浅さ(地面の高さ)。ひざ下くらいまでは水辺へ入って追ってくる
@@ -158,7 +163,127 @@
   const CAVE_SITES = [
     { x: 160,  z: -70,  dirX: 0,  dirZ: 1 },
     { x: -150, z: -195, dirX: -1, dirZ: 0 },
+    // v60: 洞窟とは別系統の、上下層と分岐を備えた深層ローグライク遺跡入口。
+    { x: -68, z: 145, dirX: 0, dirZ: 1, rogue: true },
   ];
+  const ROGUE_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogue === true);
+  // ダンジョン地形の唯一の定義。サーバーAIとクライアント描画/歩行判定で共用する。
+  const ROGUE_WALK_AREAS = [
+    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0},
+    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:11, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0},
+    {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0},
+    {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
+    {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
+    {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
+    {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
+    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4},
+    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
+    {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
+  ];
+  const ROGUE_GATE_Z = [-52, -110, -158];
+  function roguePointSegmentDistance2D(x,z,ax,az,bx,bz){
+    const dx=bx-ax,dz=bz-az,len2=dx*dx+dz*dz;
+    const t=len2>1e-8?Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/len2)):0;
+    return Math.hypot(x-(ax+dx*t),z-(az+dz*t));
+  }
+  function isRogueDungeonWalkable(x,z,openGates=0){
+    if(!Number.isFinite(x)||!Number.isFinite(z))return false;
+    const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
+    for(let i=gates;i<ROGUE_GATE_Z.length;i++) if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return false;
+    if(Math.abs(z+83)<4.55&&Math.abs(x)<38){
+      const onMainBridge=Math.abs(x)<1.48;
+      const onSideBridge=Math.abs(x-15)<1.10;
+      if(!onMainBridge&&!onSideBridge)return false;
+    }
+    return ROGUE_WALK_AREAS.some(a=>a.type==='ellipse'
+      ? (((x-a.x)/(a.rx*0.99-0.45))**2+((z-a.z)/(a.rz*0.99-0.45))**2<=1)
+      : roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*0.45);
+  }
+
+  // 粗いグリッド経路探索。細い主橋も通れるように2.5m間隔で、地形定義と同じ歩行判定を使う。
+  const ROGUE_NAV = (()=>{
+    const minX=-100,minZ=-220,step=2.5,nx=81,nz=97,walkable=new Uint8Array(nx*nz);
+    const id=(ix,iz)=>ix*nz+iz;
+    for(let ix=0;ix<nx;ix++)for(let iz=0;iz<nz;iz++){
+      const x=minX+ix*step,z=minZ+iz*step;
+      if(isRogueDungeonWalkable(x,z,ROGUE_GATE_Z.length))walkable[id(ix,iz)]=1;
+    }
+    return {minX,minZ,step,nx,nz,count:nx*nz,walkable,id};
+  })();
+  function rogueNearestNavNode(x,z,openGates){
+    const g=ROGUE_NAV,ix0=Math.max(0,Math.min(g.nx-1,Math.round((x-g.minX)/g.step))),iz0=Math.max(0,Math.min(g.nz-1,Math.round((z-g.minZ)/g.step)));
+    let best=-1,bestD=Infinity;
+    for(let r=0;r<=7&&best<0;r++){
+      for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+        if(r>0&&Math.abs(dx)!==r&&Math.abs(dz)!==r)continue;
+        const ix=ix0+dx,iz=iz0+dz;if(ix<0||ix>=g.nx||iz<0||iz>=g.nz)continue;
+        const nid=g.id(ix,iz);if(!g.walkable[nid])continue;
+        const nx=g.minX+ix*g.step,nz=g.minZ+iz*g.step;
+        if(!isRogueDungeonWalkable(nx,nz,openGates))continue;
+        const d=(nx-x)**2+(nz-z)**2;if(d<bestD){bestD=d;best=nid;}
+      }
+      if(best>=0)return best;
+    }
+    return -1;
+  }
+  function findRogueDungeonPath(fromX,fromZ,toX,toZ,openGates){
+    const g=ROGUE_NAV,start=rogueNearestNavNode(fromX,fromZ,openGates),goal=rogueNearestNavNode(toX,toZ,openGates);
+    if(start<0||goal<0)return [];
+    if(start===goal){
+      // 同じ粗いグリッドセル内にいる敵とプレイヤーは、障害物を横切らない短い直線で接近する。
+      return isRogueDungeonWalkable((fromX+toX)*.5,(fromZ+toZ)*.5,openGates)?[{x:toX,z:toZ}]:[];
+    }
+    const parent=new Int32Array(g.count);parent.fill(-2);parent[start]=-1;
+    const queue=new Int32Array(g.count);let head=0,tail=0;queue[tail++]=start;
+    const dirs=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    while(head<tail&&parent[goal]===-2){
+      const cur=queue[head++],ix=Math.floor(cur/g.nz),iz=cur%g.nz,cx=g.minX+ix*g.step,cz=g.minZ+iz*g.step;
+      for(const [dx,dz] of dirs){
+        const nxI=ix+dx,nzI=iz+dz;if(nxI<0||nxI>=g.nx||nzI<0||nzI>=g.nz)continue;
+        const next=g.id(nxI,nzI);if(parent[next]!==-2||!g.walkable[next])continue;
+        const nx=g.minX+nxI*g.step,nz=g.minZ+nzI*g.step;
+        if(!isRogueDungeonWalkable(nx,nz,openGates)||!isRogueDungeonWalkable((cx+nx)*.5,(cz+nz)*.5,openGates))continue;
+        if(dx&&dz&&(!isRogueDungeonWalkable(cx+dx*g.step,cz,openGates)||!isRogueDungeonWalkable(cx,cz+dz*g.step,openGates)))continue;
+        parent[next]=cur;queue[tail++]=next;
+      }
+    }
+    if(parent[goal]===-2)return [];
+    const path=[];for(let at=goal;at!==start&&at>=0;at=parent[at])path.push(at);path.reverse();
+    return path.map(nid=>({x:g.minX+Math.floor(nid/g.nz)*g.step,z:g.minZ+(nid%g.nz)*g.step}));
+  }
+
+  // ローグライク遺跡の区画配置。全クライアントとサーバーが同じseedから同じ配置を再現する。
+  function getRogueDungeonLayout(seed) {
+    seed = (Number.isInteger(seed) ? seed : 1) >>> 0;
+    const random = mulberry32((seed ^ 0x6d2b79f5) >>> 0);
+    const enemies = [];
+    const packs = [
+      { stage:0, kind:'shade', hp:3, spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]] },
+      { stage:1, kind:'crawler', hp:4, spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-42,-65],[43,-95],[49,-101]] },
+      { stage:2, kind:'sentinel', hp:5, spots:[[-10,-132],[10,-132],[-6,-141],[7,-143],[0,-147]] }
+    ];
+    for (const pack of packs) {
+      for (const [x,z] of pack.spots) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*3.4,z:z+(random()-.5)*3.4,hp:pack.hp,stage:pack.stage,boss:false,optional:false});
+      for (const [x,z] of (pack.optionalSpots||[])) enemies.push({id:`e${enemies.length}`,kind:pack.kind,x:x+(random()-.5)*2.2,z:z+(random()-.5)*2.2,hp:pack.hp,stage:pack.stage,boss:false,optional:true});
+    }
+    const baseChests=[[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
+    const chests=baseChests.map(([x,z,stage])=>({
+      x:x+(random()-.5)*(stage===1?4.5:3.2),
+      z:z+(random()-.5)*(stage===1?4.0:3.0), stage
+    }));
+    const boss={id:'boss',kind:'sentinel',x:0,z:-184,hp:42,stage:3,boss:true,optional:false};
+    return {seed,enemies,chests,boss};
+  }
+
+  function getRogueChestReward(seed, index) {
+    const rewardSeed = ((seed >>> 0) ^ Math.imul((index + 1) >>> 0, 0x9e3779b9) ^ 0xa511e9b3) >>> 0;
+    const random = mulberry32(rewardSeed);
+    if (random() < 0.56) return {slot:'weapon', bonus:1+Math.floor(random()*3), shards:2};
+    return {slot:'armor', bonus:1+Math.floor(random()*2), shards:2};
+  }
   // 洞窟の外観が占める範囲(ローカル座標: 左右±halfW、奥行き z0〜z1。+z が山の奥行き方向)
   const CAVE_AREA = { halfW: 13, z0: -7, z1: 26 };
 
@@ -474,7 +599,7 @@
   }
 
   // ---- 敵の野営地: 見張りの狼たちが守る小さな陣地。見張りを倒すと戦利品の箱が開けられる(seed から再現できる) ----
-  const CAMP = { footR: 7, guardR: 4.5 };
+  const CAMP = { footR: 7, guardR: 4.5, siteCount: CAMP_SITE_COUNT, guardsPerSite: CAMP_GUARDS_PER_SITE };
 
   function campSiteOk(x, z, ruins, avoid) {
     const h = islandHeight(x, z);
@@ -546,10 +671,45 @@
     return null;
   }
 
+  // 最初の野営地は旧 getCampLocation と同じ場所を維持し、追加分だけをseedから決定する。
+  // 既存セーブの宝箱番号と最初の野営地・敵IDを保ち、追加拠点は離れた平坦な陸地を優先する。
+  function getCampLocations(seed, count) {
+    count = Number.isInteger(count) ? Math.max(1, Math.min(CAMP_SITE_COUNT, count)) : CAMP_SITE_COUNT;
+    const first = getCampLocation(seed);
+    if (!first) return [];
+    const camps = [first];
+    if (count === 1) return camps;
+    const random = mulberry32(((seed >>> 0) ^ 0x7ab491e3) >>> 0);
+    const ruins = getRuinLocations(seed, 6);
+    const avoidBase = [];
+    const boss = getBossHome(seed);
+    if (boss) avoidBase.push({ x:boss.x, z:boss.z, gap:26 });
+    const lighthouse = getLighthouseLocation(seed);
+    if (lighthouse) avoidBase.push({ x:lighthouse.x, z:lighthouse.z, gap:24 });
+    for (const sp of getLegacySpringLocations(seed, 2)) avoidBase.push({ x:sp.x, z:sp.z, gap:30 });
+    for (let index = 1; index < count; index++) {
+      let placed = null;
+      // 一度の配置失敗で拠点をなくさないよう複数回試す。候補はすべてseed依存で再現できる。
+      for (let attempt = 0; attempt < 2200 && !placed; attempt++) {
+        const ang = random() * Math.PI * 2;
+        const r = 72 + random() * (WORLD_SIZE * 0.43 - 72);
+        const x = Math.round(Math.cos(ang) * r * 100) / 100;
+        const z = Math.round(Math.sin(ang) * r * 100) / 100;
+        const avoid = avoidBase.concat(camps.map(c => ({ x:c.x, z:c.z, gap:64 })));
+        if (!campSiteOk(x, z, ruins, avoid)) continue;
+        if (camps.some(c => Math.hypot(c.x - x, c.z - z) < 64)) continue;
+        placed = { x, z, y:Math.round(islandHeight(x, z) * 100) / 100, ry:random() * Math.PI * 2 };
+      }
+      if (placed) camps.push(placed);
+    }
+    return camps;
+  }
+
   // 戦利品の箱は陣地の中央の少し奥
-  function campChestSpot(C) {
+  function campChestSpot(C, campIndex) {
+    campIndex = Number.isInteger(campIndex) ? Math.max(0, campIndex) : 0;
     const x = Math.round((C.x + Math.cos(C.ry) * 1.6) * 100) / 100, z = Math.round((C.z + Math.sin(C.ry) * 1.6) * 100) / 100;
-    return { x, y: Math.round(islandHeight(x, z) * 100) / 100, z, ry: C.ry + Math.PI, camp: true };
+    return { x, y: Math.round(islandHeight(x, z) * 100) / 100, z, ry: C.ry + Math.PI, camp: true, campIndex };
   }
 
   // ---- 海底洞窟: 海底の岩でできた丸い小部屋(入口は1か所)。中にクラゲが漂い、奥に宝箱がある(seed から再現できる) ----
@@ -602,8 +762,7 @@
     const lh = getLighthouseLocation(seed);
     if (lh) zones.push({ x: lh.x, z: lh.z, r: LIGHTHOUSE.rampOut + 2 });
     for (const sp of getSpringLocations(seed, 2)) zones.push({ x: sp.x, z: sp.z, r: SPRING.footR + 1.8 });
-    const camp = getCampLocation(seed);
-    if (camp) zones.push({ x: camp.x, z: camp.z, r: CAMP.footR + 1 });
+    for (const camp of getCampLocations(seed)) zones.push({ x: camp.x, z: camp.z, r: CAMP.footR + 1 });
     return zones;
   }
 
@@ -639,13 +798,17 @@
       const lighthouse = getLighthouseLocation(seed);
       if (lighthouse) locations.push(lighthouseChestSpot(lighthouse));
     }
-    if (count > LAND_CHEST_COUNT + 2) { // 末尾: 野営地の戦利品の箱
+    if (count > LAND_CHEST_COUNT + 2) { // 既存index 5: 最初の野営地の戦利品箱
       const camp = getCampLocation(seed);
-      if (camp) locations.push(campChestSpot(camp));
+      if (camp) locations.push(campChestSpot(camp, 0));
     }
-    if (count > LAND_CHEST_COUNT + 3) { // 末尾: 海底洞窟の奥の宝箱
+    if (count > LAND_CHEST_COUNT + 3) { // 既存index 6: 海底洞窟の奥の宝箱。古いセーブとの互換性のため位置を維持
       const grotto = getGrottoLocation(seed);
       if (grotto) locations.push(grottoChestSpot(grotto));
+    }
+    if (count > LAND_CHEST_COUNT + 4) { // 追加分は既存7個の後ろへ追加し、従来の宝箱indexをずらさない
+      const camps = getCampLocations(seed);
+      for (let i = 1; i < camps.length && locations.length < count; i++) locations.push(campChestSpot(camps[i], i));
     }
     return locations;
   }
@@ -761,6 +924,76 @@
       closingLoop:true,
       closureTarget:{ x:start.x, y:start.y, z:start.z },
     };
+  }
+
+  // 連続設置の記憶が切れていても、既存柵の「開いた端」同士が1本で届くなら閉じられる。
+  // プレイヤーが隙間の中ほどを指している場合だけ働かせ、無関係な柵を勝手につながない。
+  function snapAnyFenceLoopClosure(x, y, z, structures) {
+    const list = Array.from(structures || []).filter(s => s && isFenceLike(s.buildId) &&
+      [s.x, s.y, s.z, s.ry].every(Number.isFinite));
+    if (!list.length || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+
+    // 最大長の半分 + スナップ距離より遠い端点は、今回のカーソル位置で閉じられない。
+    // 先に遠方を除外し、建築物が上限近くあっても毎フレーム全組合せを調べない。
+    const endpointSearchR = FENCE_SNAP_DISTANCE + FENCE_MAX_LENGTH * 0.5 + FENCE_JOIN_TOLERANCE + 0.02;
+    const allEndpoints = [];
+    for (const s of list) {
+      for (const p of fenceEndpoints(s)) {
+        if (Math.hypot(p.x - x, p.z - z) > endpointSearchR) continue;
+        allEndpoints.push({ x:p.x, y:s.y, z:p.z, sid:s.sid });
+      }
+    }
+    if (allEndpoints.length < 2) return null;
+
+    // 端点が接続済みかどうかは、許容誤差サイズの空間ハッシュで調べる。
+    // 従来の「各端点から全柵を走査」を避け、柵が増えても O(n²) にならないようにする。
+    const cell = FENCE_JOIN_TOLERANCE;
+    const cellKey = (ix, iz) => ix + ':' + iz;
+    const buckets = new Map();
+    for (const p of allEndpoints) {
+      p.ix = Math.floor(p.x / cell); p.iz = Math.floor(p.z / cell);
+      const key = cellKey(p.ix, p.iz);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(p);
+    }
+    const openEndpoints = [];
+    for (const p of allEndpoints) {
+      let closed = false;
+      for (let ox = -1; ox <= 1 && !closed; ox++) for (let oz = -1; oz <= 1 && !closed; oz++) {
+        const neighbors = buckets.get(cellKey(p.ix + ox, p.iz + oz)) || [];
+        for (const q of neighbors) {
+          if (q.sid === p.sid) continue;
+          if (Math.hypot(q.x - p.x, q.z - p.z) <= FENCE_JOIN_TOLERANCE) { closed = true; break; }
+        }
+      }
+      if (!closed) openEndpoints.push(p);
+    }
+    if (openEndpoints.length < 2) return null;
+
+    const candidates = [];
+    for (let i = 0; i < openEndpoints.length; i++) for (let j = i + 1; j < openEndpoints.length; j++) {
+      const a = openEndpoints[i], b = openEndpoints[j];
+      if (a.sid === b.sid || Math.abs(a.y - b.y) > 0.35) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+      if (length < FENCE_MIN_LENGTH || length > FENCE_MAX_LENGTH) continue;
+      const cx = (a.x + b.x) * 0.5, cz = (a.z + b.z) * 0.5;
+      const cursorDistance = Math.hypot(cx - x, cz - z);
+      if (cursorDistance > FENCE_SNAP_DISTANCE) continue;
+      candidates.push({ x:cx, y:(a.y + b.y) * 0.5, z:cz, ry:Math.atan2(-dz, dx), length,
+        snapped:true, closingLoop:true, closureTarget:{ x:a.x, y:a.y, z:a.z }, cursorDistance });
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => a.cursorDistance - b.cursorDistance);
+
+    // 端点近くの候補しかないため、衝突判定もカーソル周辺に絞る。
+    // 5.75m はスナップ範囲(1.25m) + 衝突確認余裕(4.5m)。地形・水域等の検査は共通関数内で引き続き行う。
+    const nearbyStructures = list.filter(s => Math.hypot(s.x - x, s.z - z) <= FENCE_SNAP_DISTANCE + 4.5);
+    for (const candidate of candidates) {
+      if (checkPlacement('fence', candidate.x, candidate.y, candidate.z, nearbyStructures, candidate.ry, candidate.length)) continue;
+      delete candidate.cursorDistance;
+      return candidate;
+    }
+    return null;
   }
 
   // 柵の見た目は Three.js の Y 回転(ワールドXZ上では +X軸が (cosθ, -sinθ) へ回る)に従う。
@@ -904,6 +1137,8 @@
     if (buildId === 'fence') {
       const closure = snapFenceLoopClosure(x, y, z, ry, list, fenceChain);
       if (closure) return closure;
+      const anyClosure = snapAnyFenceLoopClosure(x, y, z, list);
+      if (anyClosure) return anyClosure;
     }
 
     let best = null;
@@ -1089,7 +1324,7 @@
   }
 
   // ---- 体の当たり判定(プレイヤー・敵が重ならないための半径と押し出し) ----
-  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, boss: BOSS_RADIUS };
+  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, campGuard: 0.45, boss: BOSS_RADIUS };
   // 点 (x,z) を、中心 (ox,oz) から minDist 以上離れるように押し出す移動量。離れていれば null
   function bodyPush(x, z, ox, oz, minDist) {
     const dx = x - ox, dz = z - oz;
@@ -1113,11 +1348,17 @@
   }
 
   function isValidCavePosition(cave, x, z) {
-    return cave < 0 || Math.hypot(x, z) <= CAVE_ROOM_RADIUS + CAVE_POSITION_TOLERANCE;
+    if (cave < 0) return true;
+    if (cave === ROGUE_DUNGEON_INDEX) {
+      // 広域境界に加え、サーバーでも共有地形の床・橋の上にいることを検証する。
+      // 門の開閉はrun進行側で管理するため、ここでは全門開放状態で床形状だけを検証。
+      return Math.abs(x) <= 105 + CAVE_POSITION_TOLERANCE && z >= -226 - CAVE_POSITION_TOLERANCE && z <= 27 + CAVE_POSITION_TOLERANCE && isRogueDungeonWalkable(x,z,ROGUE_GATE_Z.length);
+    }
+    return Math.hypot(x, z) <= CAVE_ROOM_RADIUS + CAVE_POSITION_TOLERANCE;
   }
 
   // 洞窟の出入りはワールド座標と室内ローカル座標が切り替わるため、速度判定とは別に入口位置を検証する。
-  function isValidCaveTransition(fromCave, toCave, fromX, fromZ, toX, toZ) {
+  function isValidCaveTransition(fromCave, toCave, fromX, fromZ, toX, toZ, allowDeadExit = false) {
     if (fromCave === toCave) return true;
     if (fromCave < 0 && toCave >= 0) {
       const site = CAVE_SITES[toCave];
@@ -1129,9 +1370,22 @@
     }
     if (fromCave >= 0 && toCave < 0) {
       const site = CAVE_SITES[fromCave];
-      if (!site || distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) > CAVE_TRANSITION_RADIUS) return false;
+      if (!site) return false;
       const ex = site.x + site.dirX * CAVE_EXIT_OFFSET;
       const ez = site.z + site.dirZ * CAVE_EXIT_OFFSET;
+      // 通常洞窟は従来どおり出口付近からのみ退室可能。
+      // ローグライク遺跡では深層の生還門と死亡後の帰還も同じ島側出口へ戻すため、
+      // 内部の有効範囲内なら出口座標を検証して退室を許可する。
+      // 退室先は指定された入口外の座標に固定し、任意地点へのワープは許可しない。
+      if (fromCave === ROGUE_DUNGEON_INDEX) {
+        if (!isValidCavePosition(fromCave, fromX, fromZ)) return false;
+        const atMainExit = distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) <= CAVE_TRANSITION_RADIUS;
+        const atExtractionPortal = distanceXZ(fromX, fromZ, 0, -201) <= CAVE_TRANSITION_RADIUS;
+        // 生還門・通常出口以外からのワープは拒否。死亡後だけは任意の有効な内部位置から帰還可能。
+        if (!atMainExit && !atExtractionPortal && !allowDeadExit) return false;
+        return distanceXZ(toX, toZ, ex, ez) <= CAVE_EXIT_SPAWN_RADIUS;
+      }
+      if (distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) > CAVE_TRANSITION_RADIUS) return false;
       return distanceXZ(toX, toZ, ex, ez) <= CAVE_EXIT_SPAWN_RADIUS;
     }
     // 洞窟0→洞窟1のような直接ワープは禁止。
@@ -1155,11 +1409,17 @@
       this.underwaterLayout = getUnderwaterLayout(this.seed);
       this.underwaterResources = this.underwaterLayout.resources;
       this.chestLocations = getChestLocations(this.seed, getRuinLocations(this.seed, 6), MAX_CHESTS);
-      this.campLocation = getCampLocation(this.seed);
+      this.campLocations = getCampLocations(this.seed);
+      this.campLocation = this.campLocations[0] || getCampLocation(this.seed); // 旧コード/API互換
       this.grottoLocation = getGrottoLocation(this.seed);
       this.tickCount = 0;
       this.pickupOthers = !!opts.pickupOthers; // true なら他人の建築物も回収できる
       this.emergencyEscapeCooldowns = new Map(); // player identity -> cooldown expiry(ms)
+      // ダンジョンはパーティーコードごとに独立した探索ランを持つ。
+      this.rogueRooms = new Map();       // partyKey -> room state
+      this.rogueRoomsById = new Map();   // instanceId -> room state
+      this.rogueRoomSeq = 1;
+      this.rogueHitCooldowns = new Map();
       this.out = { sendTo() {}, broadcast() {} };
 
       if (saved && typeof saved === 'object') {
@@ -1206,7 +1466,7 @@
           x: 0, z: 0, ry: 0, homeX: 0, homeZ: 0, tx: 0, tz: 0, retarget: 0,
           speed: cfg.speed, fleeTimer: 0, knockX: 0, knockZ: 0, attackTimer: 0, respawnAt: 0, awake: !cfg.dormant, blockedT: 0, returnT: 0,
           mv: null, mvPh: 0, mvT: 0, mvTarget: 0, mvHit: null, dirX: 0, dirZ: 0, combo: 0, circDir: 1, circT: 0, look: null,
-          camp: i >= ENEMY_CAMP_START && i < ENEMY_GROTTO_START, grotto: i >= ENEMY_GROTTO_START,
+          camp: i >= ENEMY_CAMP_START && i < ENEMY_GROTTO_START, campIndex:getCampIndexForEnemyId(i), grotto: i >= ENEMY_GROTTO_START,
         };
         this.enemies.push(en);
         this.placeEnemy(en);
@@ -1225,8 +1485,8 @@
         }
         return null;
       }
-      if (en && en.camp) { // 野営地の見張り: 陣地のまわり(中央の箱から少し離れた所)
-        const C = this.campLocation;
+      if (en && en.camp) { // 野営地の見張り: 自分の野営地のまわり(中央の箱から少し離れた所)
+        const C = this.campLocations[en.campIndex] || this.campLocation;
         if (!C) return null;
         for (let tries = 0; tries < 60; tries++) {
           const ang = Math.random() * Math.PI * 2, r = 2.6 + Math.random() * 2.2;
@@ -1282,6 +1542,7 @@
         id, name: '', pid: '', joined: false, joinedAt: 0, lastChatAt: 0,
         x: 0, y: 0, z: 6, ry: 0, cave: -1, flags: 0, dead: false,
         hasState: false, lastStateAt: 0, clientTime: null, clientTimeOrigin: null, serverTimeOrigin: null, lastHitAt: new Map(),
+        roguePartyKey: null, rogueRoomKey: null,
         lastGateToggleAt: 0,
         stuckSince: 0, lastBlockedAt: 0, stuckAnchorX: 0, stuckAnchorZ: 0,
       });
@@ -1300,8 +1561,149 @@
       };
     }
 
+    rogueRoomSnapshot(room) {
+      return {
+        t:'rogueRoomJoined', instanceId:room.id, seed:room.seed, partyCode:room.partyCode || '',
+        stage:room.stage, openGates:room.openGates, extractReady:room.extractReady,
+        openedChests:[...room.openedChests], enemyHp:Object.fromEntries(room.enemyHp),
+        enemyPositions:[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw)})),
+      };
+    }
+
+    getRogueRoomForClient(id) {
+      const c=this.clients.get(id);
+      if(!c || !c.rogueRoomKey) return null;
+      const room=this.rogueRooms.get(c.rogueRoomKey);
+      return room && room.members.has(id) ? room : null;
+    }
+
+    joinRogueRoom(id) {
+      const c=this.clients.get(id);
+      if(!c || c.cave!==ROGUE_DUNGEON_INDEX) return;
+      // 新クライアントはソロまたは6文字のパーティーコードを先に送信する。
+      // 古いクライアントは個別ランへ入れ、意図しない全員共有を防ぐ。
+      const partyKey=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${id}`;
+      let room=this.rogueRooms.get(partyKey);
+      if(!room) {
+        const seed=Math.floor(Math.random()*4294967296)>>>0;
+        const layout=getRogueDungeonLayout(seed);
+        const enemyHp=new Map(layout.enemies.map(e=>[e.id,e.hp]));
+        enemyHp.set(layout.boss.id,layout.boss.hp);
+        const enemyStates=new Map(layout.enemies.map(e=>[e.id,{x:e.x,z:e.z,yaw:0,cooldown:0.8+Math.random()*0.9,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0}]));
+        enemyStates.set(layout.boss.id,{x:layout.boss.x,z:layout.boss.z,yaw:0,cooldown:1.2,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0});
+        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:0,openGates:0,extractReady:false,openedChests:new Set(),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0};
+        this.rogueRooms.set(partyKey,room);
+        this.rogueRoomsById.set(room.id,room);
+      }
+      c.rogueRoomKey=partyKey;
+      room.members.add(id);
+      this.out.sendTo(id,this.rogueRoomSnapshot(room));
+      this.broadcastRogueRoom(room,{t:'rogueRoomMembers',instanceId:room.id,count:room.members.size,joined:id},id);
+    }
+
+    leaveRogueRoom(id) {
+      const c=this.clients.get(id);
+      const room=this.getRogueRoomForClient(id);
+      if(!room) { if(c)c.rogueRoomKey=null; return; }
+      room.members.delete(id);
+      if(c)c.rogueRoomKey=null;
+      for(const key of this.rogueHitCooldowns.keys()) if(key.startsWith(`${id}:`)) this.rogueHitCooldowns.delete(key);
+      if(room.members.size===0) {
+        this.rogueRooms.delete(room.key);
+        this.rogueRoomsById.delete(room.id);
+        return;
+      }
+      this.broadcastRogueRoom(room,{t:'rogueRoomMembers',instanceId:room.id,count:room.members.size,left:id});
+    }
+
+    broadcastRogueRoom(room, message, except) {
+      if(!room) return;
+      for(const memberId of room.members) if(memberId!==except) this.out.sendTo(memberId,message);
+    }
+
+    updateRogueRoomProgress(room) {
+      while(room.stage<3) {
+        const layout=getRogueDungeonLayout(room.seed);
+        const mandatory=layout.enemies.filter(e=>e.stage===room.stage&&!e.optional);
+        if(!mandatory.length || mandatory.some(e=>(room.enemyHp.get(e.id)||0)>0)) break;
+        room.stage++; room.openGates=Math.max(room.openGates,room.stage);
+      }
+      if(room.stage===3 && (room.enemyHp.get('boss')||0)<=0) { room.stage=4; room.openGates=4; room.extractReady=true; }
+    }
+
+    updateRogueRoom(room, dt, now) {
+      if(!room||room.members.size===0)return;
+      const layout=getRogueDungeonLayout(room.seed);
+      const members=[...room.members].map(id=>this.clients.get(id)).filter(c=>c&&c.joined&&!c.dead&&c.hasState&&c.cave===ROGUE_DUNGEON_INDEX&&now-(c.lastStateAt||0)<5000);
+      if(members.length){
+        const targets=[...layout.enemies,layout.boss];
+        for(const target of targets){
+          const hp=room.enemyHp.get(target.id)||0,state=room.enemyStates.get(target.id);
+          if(!state||hp<=0)continue;
+          if(target.boss ? room.stage!==3 : ((!target.optional&&target.stage!==room.stage)||(target.optional&&target.stage>room.stage)))continue;
+          state.cooldown=Math.max(0,state.cooldown-dt);
+          state.repath=Math.max(0,state.repath-dt);
+          state.attackPulse=Math.max(0,state.attackPulse-dt);
+          let selected=null,selectedPath=null,selectedD=Infinity;
+          // 0.35秒ごとに経路と標的を選び直す。近い標的へ直進するだけで壁・裂け目に突っ込まない。
+          if(state.repath<=0||(state.path.length>0&&state.pathIndex>=state.path.length)){
+            const ordered=members.map(c=>({c,d:Math.hypot(c.x-state.x,c.z-state.z)})).filter(v=>v.d<=(target.boss?34:29)).sort((a,b)=>a.d-b.d);
+            for(const candidate of ordered){
+              const route=findRogueDungeonPath(state.x,state.z,candidate.c.x,candidate.c.z,room.openGates);
+              if(candidate.d<=(target.boss?3.3:1.65)||route.length){selected=candidate.c;selectedPath=route;selectedD=candidate.d;break;}
+            }
+            state.targetId=selected?selected.id:null;
+            state.path=selectedPath||[];state.pathIndex=0;state.repath=0.35;
+          } else {
+            selected=members.find(c=>c.id===state.targetId)||null;
+            if(selected)selectedD=Math.hypot(selected.x-state.x,selected.z-state.z);
+          }
+          if(!selected){state.targetId=null;state.path=[];state.pathIndex=0;state.repath=0.35;continue;}
+          const dx=selected.x-state.x,dz=selected.z-state.z,d=Math.hypot(dx,dz);
+          if(d>1e-4)state.yaw=Math.atan2(-dx,-dz);
+          const attackRange=target.boss?3.3:1.65;
+          if(d<=attackRange){
+            state.path=[];state.pathIndex=0;
+            if(state.cooldown<=0){
+              state.cooldown=target.boss?2.05:(target.kind==='sentinel'?1.8:1.35);
+              state.attackPulse=0.28;
+              const baseDamage=target.boss?7:3+target.stage;
+              this.out.sendTo(selected.id,{t:'roguePlayerHurt',instanceId:room.id,sourceId:target.id,amount:baseDamage,dx:dx/(d||1),dz:dz/(d||1)});
+            }
+          }else if(d<(target.boss?34:29)){
+            if(!state.path.length||state.pathIndex>=state.path.length){
+              // 経路がない時は移動させず、プレイヤーや壁を貫通するフォールバックを行わない。
+              continue;
+            }
+            const waypoint=state.path[state.pathIndex],wx=waypoint.x-state.x,wz=waypoint.z-state.z,wd=Math.hypot(wx,wz);
+            if(wd<0.18){
+              state.pathIndex++;
+              if(state.pathIndex>=state.path.length){state.path=[];state.pathIndex=0;state.repath=0;}
+            }
+            else {
+              const speed=target.boss?1.45:(target.kind==='crawler'?2.7:target.kind==='sentinel'?1.8:2.3);
+              const step=Math.min(wd,speed*dt),nx=state.x+wx/(wd||1)*step,nz=state.z+wz/(wd||1)*step;
+              if(isRogueDungeonWalkable(nx,nz,room.openGates)){state.x=nx;state.z=nz;}
+              else {state.path=[];state.pathIndex=0;state.repath=0;}
+            }
+          }
+        }
+      }
+      room.motionTimer-=dt;
+      if(room.motionTimer<=0){
+        room.motionTimer=0.1;
+        const enemies=[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw),attack:e.attackPulse>0?1:0}));
+        this.broadcastRogueRoom(room,{t:'rogueEnemyMotion',instanceId:room.id,enemies});
+      }
+    }
+
+    rogueRoomStateMessage(room) {
+      return {t:'rogueRoomState',instanceId:room.id,stage:room.stage,openGates:room.openGates,extractReady:room.extractReady,openedChests:[...room.openedChests],enemyHp:Object.fromEntries(room.enemyHp)};
+    }
+
     removeClient(id) {
       const c = this.clients.get(id);
+      if(c && c.rogueRoomKey) this.leaveRogueRoom(id);
       this.clients.delete(id);
       if (c && c.joined) this.out.broadcast({ t: 'leave', id }, id);
     }
@@ -1328,6 +1730,21 @@
           this.out.sendTo(id, { t: 'joined', pid: c.pid, pickupOthers: this.pickupOthers });
           break;
         }
+        case 'roguePartySelect': {
+          if(!c.joined || c.cave===ROGUE_DUNGEON_INDEX) return;
+          const mode=msg.mode==='solo'?'solo':(msg.mode==='create'||msg.mode==='join'?'party':'');
+          if(!mode) { c.roguePartyKey=null; this.out.sendTo(id,{t:'roguePartySelected',ok:false,reason:'invalid-mode'}); return; }
+          if(mode==='solo') {
+            c.roguePartyKey=`solo:${id}`;
+            this.out.sendTo(id,{t:'roguePartySelected',ok:true,mode:'solo',code:''});
+          } else {
+            const code=typeof msg.code==='string'?msg.code.trim().toUpperCase():'';
+            if(!/^[A-Z0-9]{6}$/.test(code)) { c.roguePartyKey=null; this.out.sendTo(id,{t:'roguePartySelected',ok:false,reason:'invalid-code'}); return; }
+            c.roguePartyKey=`party:${code}`;
+            this.out.sendTo(id,{t:'roguePartySelected',ok:true,mode,code});
+          }
+          break;
+        }
         case 'attack': {
           // 攻撃モーションは位置スナップショットのフラグ変化だけに頼らず、攻撃ごとに独立して通知する。
           // 連打で「攻撃中→攻撃中」のままになると、低頻度のsnapでは立ち上がりを取り逃がすため。
@@ -1335,11 +1752,18 @@
           const now = Date.now();
           if (now - (c.lastAttackAt || 0) < 100) return;
           c.lastAttackAt = now;
-          this.out.broadcast({ t: 'patk', id }, id);
+          if(c.cave===ROGUE_DUNGEON_INDEX){
+            const room=this.getRogueRoomForClient(id);
+            if(!room)return;
+            this.broadcastRogueRoom(room,{t:'patk',id,cave:c.cave,instanceId:room.id},id);
+          } else {
+            this.out.broadcast({ t: 'patk', id, cave:c.cave, instanceId:0 }, id);
+          }
           break;
         }
         case 'state': {
           if (!c.joined) return;
+          const previousCave=c.cave;
           // 位置同期は他の参加者や敵AIも参照するため、壊れた値を状態に保存しない。
           // num() で不正値を 0 に変換すると、壊れたパケットでプレイヤーが原点へ飛ぶため、ここは拒否する。
           const values = [msg.x, msg.y, msg.z, msg.ry];
@@ -1363,7 +1787,7 @@
               const serverElapsedFromOrigin = Math.max(0, (now - c.serverTimeOrigin) / 1000);
               if (clientElapsedFromOrigin > serverElapsedFromOrigin + MAX_CLIENT_TIME_AHEAD_SEC) return;
             }
-            if (!isValidCaveTransition(c.cave, msg.cave, c.x, c.z, msg.x, msg.z)) return;
+            if (!isValidCaveTransition(c.cave, msg.cave, c.x, c.z, msg.x, msg.z, c.dead)) return;
             if (c.cave === msg.cave) {
               // 現行クライアントは送信時刻(ts)を付けるため、WebSocketの受信が固まっても
               // バッファされた位置更新を順番に正しく検証できる。旧クライアントは受信時刻にフォールバック。
@@ -1398,6 +1822,49 @@
           // クライアントが送れる状態フラグを定義済みの5ビットに限定する。
           c.flags = (msg.f | 0) & 31;
           c.dead = !!(c.flags & 8);
+          if(previousCave!==ROGUE_DUNGEON_INDEX && c.cave===ROGUE_DUNGEON_INDEX) this.joinRogueRoom(id);
+          else if(previousCave===ROGUE_DUNGEON_INDEX && c.cave!==ROGUE_DUNGEON_INDEX) this.leaveRogueRoom(id);
+          break;
+        }
+        case 'rogueChestOpen': {
+          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX) return;
+          const room=this.getRogueRoomForClient(id);
+          if(!room) return;
+          const idx=Number.isInteger(msg.index)?msg.index:-1;
+          if(idx<0 || idx>=5 || room.openedChests.has(idx) || !c.hasState) return;
+          const chest=getRogueDungeonLayout(room.seed).chests[idx];
+          if(!chest || distanceXZ(c.x,c.z,chest.x,chest.z)>5.2) return;
+          room.openedChests.add(idx);
+          const reward=getRogueChestReward(room.seed,idx);
+          const event={t:'rogueChestOpened',instanceId:room.id,index:idx,reward,by:id};
+          this.broadcastRogueRoom(room,event);
+          this.broadcastRogueRoom(room,this.rogueRoomStateMessage(room));
+          break;
+        }
+        case 'rogueHit': {
+          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState) return;
+          const room=this.getRogueRoomForClient(id);
+          if(!room) return;
+          const targetId=typeof msg.targetId==='string' && /^(?:e(?:[0-9]|1[0-9])|boss)$/.test(msg.targetId)?msg.targetId:'';
+          if(!targetId) return;
+          const layout=getRogueDungeonLayout(room.seed);
+          const target=targetId==='boss'?layout.boss:layout.enemies.find(e=>e.id===targetId);
+          if(!target || (target.boss && room.stage!==3) || (!target.boss && !target.optional && target.stage!==room.stage)) return;
+          const tx=msg.x,tz=msg.z,enemyState=room.enemyStates.get(targetId);
+          if(!enemyState||![tx,tz].every(v=>typeof v==='number'&&Number.isFinite(v)) || Math.abs(tx)>105 || tz>27 || tz< -226) return;
+          // 現在のサーバー管理位置へ届く攻撃だけを受理。クライアント指定座標で命中を偽装できないようにする。
+          if(distanceXZ(c.x,c.z,enemyState.x,enemyState.z)>(target.boss?5.8:5.2) || distanceXZ(enemyState.x,enemyState.z,tx,tz)>5.0) return;
+          const cooldownKey=`${id}:${targetId}`,now=Date.now(),last=this.rogueHitCooldowns.get(cooldownKey)||0;
+          if(now-last<110) return;
+          this.rogueHitCooldowns.set(cooldownKey,now);
+          const before=room.enemyHp.get(targetId)||0; if(before<=0) return;
+          const damage=clamp(Math.round(num(msg.damage,1)),1,8);
+          const hp=Math.max(0,before-damage); room.enemyHp.set(targetId,hp);
+          let shardReward=0;
+          if(hp===0 && !target.boss) { const r=mulberry32((room.seed ^ (targetId.charCodeAt(0)*2654435761) ^ (Number(targetId.slice(1))||0))>>>0); shardReward=1+Math.floor(r()*3); }
+          this.updateRogueRoomProgress(room);
+          this.broadcastRogueRoom(room,{t:'rogueEnemyHitState',instanceId:room.id,targetId,hp,maxHp:target.hp,damage,by:id,killed:hp===0,shardReward,x:enemyState.x,z:enemyState.z,stage:room.stage,openGates:room.openGates,extractReady:room.extractReady});
+          this.broadcastRogueRoom(room,this.rogueRoomStateMessage(room));
           break;
         }
         case 'emergencyEscape': {
@@ -1599,7 +2066,7 @@
           // indexだけでは開けられない。サーバーが生成した宝箱の座標との距離も確認する。
           const chest = this.chestLocations[idx];
           if ((chest.lighthouse || chest.grotto) && Math.abs(c.y - chest.y) > 4) return; // 灯台の宝箱は頂上まで登らないと、洞窟の宝箱は水面の上からは開けられない
-          if (chest.camp && this.enemies.some(e => e.camp && e.alive)) return; // 野営地の箱は、見張りを全員倒してから
+          if (chest.camp && this.enemies.some(e => e.camp && e.campIndex === (Number.isInteger(chest.campIndex) ? chest.campIndex : 0) && e.alive)) return; // その野営地の見張りだけを倒せば開く
           if (!c.hasState || distanceXZ(c.x, c.z, chest.x, chest.z) > CHEST_INTERACT_RADIUS) return;
           this.chests.add(idx);
           this.out.broadcast({ t: 'chestOpened', idx, by: id });
@@ -1659,6 +2126,7 @@
       }
       this.updateEnemies(dt, now);
       this.updateBoss(dt, now);
+      for(const room of this.rogueRooms.values()) this.updateRogueRoom(room, dt, now);
       this.tickCount++;
       if (this.tickCount % 2 === 0) this.broadcastSnap();
     }
@@ -1869,7 +2337,10 @@
     broadcastSnap() {
       const players = [];
       for (const c of this.clients.values()) {
-        if (c.joined) players.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.ry), c.cave, c.flags]);
+        if (c.joined) {
+          const rogueRoom=c.cave===ROGUE_DUNGEON_INDEX?this.getRogueRoomForClient(c.id):null;
+          players.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.ry), c.cave, c.flags, rogueRoom?rogueRoom.id:0]);
+        }
       }
       if (!players.length) return;
       const e = [];
@@ -2058,6 +2529,8 @@
       this.chests = candidate.chests;
       this.nextSid = candidate.nextSid;
       this.chestLocations = candidate.chestLocations;
+      this.campLocations = candidate.campLocations;
+      this.campLocation = candidate.campLocation;
       this.underwaterLayout = candidate.underwaterLayout;
       this.underwaterResources = candidate.underwaterResources;
       this.enemies = candidate.enemies;
@@ -2077,13 +2550,13 @@
     WORLD_SIZE, noise2, islandHeight, mulberry32, WorldSim, MAX_BULK_PICKUP_IDS,
     WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, springTerrainOffset, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
     FENCE_MIN_LENGTH, FENCE_MAX_LENGTH, FENCE_JOIN_TOLERANCE, fenceEndpoints, fenceEndpointJoin, fenceEndsMeet,
-    ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
+    ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, getCampIndexForEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, getCampLocations, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
     CHAT_MAX_CHARS, CHAT_INTERVAL_MS, EMOTE_COUNT, cleanChat, BODY_RADIUS, bodyPush,
     isValidCavePosition, isValidCaveTransition, MAX_PLAYER_SPEED, HIT_COOLDOWN_MS, MAX_TRACKED_TAKEN,
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
-    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT,
+    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, findRogueDungeonPath, getRogueDungeonLayout, getRogueChestReward,
     getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
   };
 });
