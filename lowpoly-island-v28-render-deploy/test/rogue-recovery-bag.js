@@ -1,4 +1,4 @@
-// v61.4: 死亡・切断時の遺品袋、期限、所有者限定回収を検証
+// v61.5: 死亡・切断時の遺品袋、期限、所有者限定回収を検証
 'use strict';
 const assert=require('assert');
 const Shared=require('../public/shared.js');
