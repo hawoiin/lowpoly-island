@@ -203,11 +203,11 @@
       : roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*0.45);
   }
 
-  // 斜面通路の側壁は見た目だけのメッシュなので、移動時に側面を横切る動きを別途止める。
-  // 前後の位置が側壁を横切り、かつ通路の端付近ではない場合だけ衝突とする。
-  // 端から通路方向へ入る通常の移動や、通路内を進む動きは妨げない。
-  function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ,bodyRadius=0.35){
-    if(![fromX,fromZ,toX,toZ,bodyRadius].every(Number.isFinite))return false;
+  // 斜面通路の側壁は見た目だけのメッシュなので、側面から坂へ乗り上げる侵入だけを止める。
+  // 坂の内側から外側の歩行可能な地面へ降りる移動は妨げない。
+  // 端から通路方向へ入る通常の移動や、通路内を進む動きも維持する。
+  function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ){
+    if(![fromX,fromZ,toX,toZ].every(Number.isFinite))return false;
     for(const a of ROGUE_WALK_AREAS){
       if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
       const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
@@ -222,10 +222,11 @@
       // 入口と出口の端から約1.25mは開けておく。中央部の側面だけを壁として扱う。
       const endT=Math.min(0.14,1.25/len);
       if(to.t<=endT||to.t>=1-endT)continue;
-      // addCorridorFloor の側壁は width/2 + .18m の位置にあり、厚み .34m。
-      // プレイヤー半径も含めた中心位置の侵入限界は width/2 + .18 + .17 + bodyRadius。
-      const sideLimit=a.width*0.5+0.35+bodyRadius;
-      if((from.d>sideLimit&&to.d<=sideLimit)||(from.d<=sideLimit&&to.d>sideLimit))return true;
+      // 坂の歩行可能判定・床高補間と同じ境界にそろえる。
+      // 見た目の側壁より外側を境界にすると、地面へ降りた後で見えない壁に引っ掛かる。
+      const walkLimit=a.width*0.45;
+      // 外側から坂の歩行領域へ入る動きだけ遮断。坂から隣の歩行可能な地面へ出る動きは通す。
+      if(from.d>walkLimit&&to.d<=walkLimit)return true;
     }
     return false;
   }

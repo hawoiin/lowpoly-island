@@ -576,7 +576,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v62.7</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v62.8</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -2550,7 +2550,7 @@ window.startGame = function(NETINIT){
     if(inCaveIndex!==ROGUE_DUNGEON_INDEX||!rogueRun)return;
     const last=rogueRun.lastPos||{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z};
     // 傾斜した板の側壁を横切って入る動きを止める。坂の端からの出入りは従来どおり許可する。
-    if(Shared.isRogueRampSideEntryBlocked(last.x,last.z,pos.x,pos.z,0.35)){
+    if(Shared.isRogueRampSideEntryBlocked(last.x,last.z,pos.x,pos.z)){
       pos.x=last.x;pos.z=last.z;return;
     }
     if(isRogueWalkable(pos.x,pos.z,rogueRun.openGates)){rogueRun.lastPos={x:pos.x,z:pos.z};return;}
@@ -9646,7 +9646,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=62.7-free-session-startup-order-fix"></script>
+<script src="shared.js?v=62.8-ramp-side-exit-fix"></script>
 <script src="boot.js"></script>
 </body>
 </html>
