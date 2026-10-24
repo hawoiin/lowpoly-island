@@ -1,4 +1,4 @@
-// v64.0: 坂専用の例外を減らし、上下階の重なりも含めて床面の連続性を検証する。
+// v64.1: 坂専用の例外を減らし、上下階の重なりも含めて床面の連続性を検証する。
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const html=fs.readFileSync(path.join(__dirname,'..','public/index.html'),'utf8');
